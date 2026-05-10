@@ -1,0 +1,6 @@
+#define KFR_HAVE_DFT
+#define KFR_HAVE_DSP
+#define KFR_HAVE_IO
+#define KFR_HAVE_AUDIO
+#define KFR_HAVE_ELLIPTIC 1
+#define KFR_AUDIO_FLAC 1
