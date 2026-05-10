@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>肠鸣音声学特征检测报告</title>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', 'SimHei', sans-serif;
+            background-color: #f1f5f9;
+            color: #1e293b;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .report-container {
+            background: #ffffff;
+            width: 100%;
+            max-width: 850px;
+            margin: 0 auto;
+            padding: 40px 50px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            border-top: 8px solid #0284c7;
+            box-sizing: border-box;
+            border-radius: 4px;
+            position: relative;
+        }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #cbd5e1;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+            font-size: 13px;
+            color: #475569;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        .page-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top: 1px dashed #cbd5e1;
+            padding-top: 15px;
+            margin-top: 50px;
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        .header-id {
+            color: #0f172a;
+            font-weight: bold;
+            font-size: 15px;
+        }
+
+        @media print {
+            body {
+                background: none;
+                padding: 0;
+            }
+
+            .report-container {
+                box-shadow: none;
+                border: none;
+                padding: 0;
+                max-width: 100%;
+            }
+
+            tr {
+                page-break-inside: avoid;
+            }
+
+            h2 {
+                page-break-after: avoid;
+            }
+        }
+
+        h1 {
+            text-align: center;
+            color: #0f172a;
+            font-size: 26px;
+            letter-spacing: 2px;
+            margin-top: 0;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+
+        .main-subtitle {
+            text-align: center;
+            color: #64748b;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            font-size: 16px;
+            color: #ffffff;
+            background-color: #334155;
+            padding: 8px 16px;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            border-radius: 3px;
+            display: inline-block;
+            width: 100%;
+            box-sizing: border-box;
+            letter-spacing: 1px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            margin-bottom: 20px;
+            font-size: 13px;
+        }
+
+        th, td {
+            border: 1px solid #cbd5e1;
+            padding: 10px 12px;
+        }
+
+        th {
+            background-color: #f8fafc;
+            color: #0f172a;
+            font-weight: bold;
+            text-align: center;
+            border-bottom: 2px solid #94a3b8;
+        }
+
+        td.col-name {
+            text-align: left;
+            font-weight: 500;
+            color: #334155;
+            width: 35%;
+        }
+
+        td.col-value {
+            text-align: center;
+            color: #0284c7;
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+            font-size: 14px;
+            width: 25%;
+        }
+
+        td.col-unit {
+            text-align: center;
+            color: #64748b;
+            width: 15%;
+        }
+
+        td.col-desc {
+            text-align: left;
+            color: #64748b;
+            font-size: 12px;
+        }
+
+        tbody tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        .event-table td.col-value {
+            width: auto;
+        }
+
+        .event-table td.col-name {
+            width: auto;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="report-container">
+
+        <div class="page-header">
+            <div>报告编号: <span class="header-id">AS-20260313-0098</span></div>
+            <div>检测日期: <span style="color: #0f172a; font-weight:bold;">2026-03-13 10:45:00</span></div>
+        </div>
+
+        <h1>肠鸣音声学特征检测报告</h1>
+        <div class="main-subtitle">Acoustic Feature Analysis Report of Bowel Sounds</div>
+
+        <h2>1. 综合声学特征分析（Comprehensive Acoustic Features）</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th colspan="4" style="background-color: #e2e8f0; text-align: left; padding-left: 15px;">1.1 时间域特征 (Time-Domain)</th>
+                </tr>
+                <tr><th>分析指标</th><th>检测数值</th><th>单位</th><th>临床物理意义</th></tr>
+            </thead>
+            <tbody>
+                <tr><td class="col-name">总肠鸣音次数</td><td class="col-value">24</td><td class="col-unit">次</td><td class="col-desc">分析时段内触发的事件总数</td></tr>
+                <tr><td class="col-name">肠鸣音发生频率</td><td class="col-value">4.8</td><td class="col-unit">events/min</td><td class="col-desc">每分钟肠鸣音平均发生次数</td></tr>
+                <tr><td class="col-name">平均持续时间</td><td class="col-value">285.5</td><td class="col-unit">ms</td><td class="col-desc">单次肠鸣音持续时间均值</td></tr>
+                <tr><td class="col-name">平均间隔时间</td><td class="col-value">12.5</td><td class="col-unit">s</td><td class="col-desc">两次肠鸣音之间的静默期均值</td></tr>
+                <tr><td class="col-name">峰值振幅</td><td class="col-value">1.12</td><td class="col-unit">mV</td><td class="col-desc">时域信号中的绝对最大振幅</td></tr>
+            </tbody>
+        </table>
+
+        <table>
+            <thead>
+                <tr>
+                    <th colspan="4" style="background-color: #e2e8f0; text-align: left; padding-left: 15px;">1.2 频率域特征 (Frequency-Domain)</th>
+                </tr>
+                <tr><th>分析指标</th><th>检测数值</th><th>单位</th><th>临床物理意义</th></tr>
+            </thead>
+            <tbody>
+                <tr><td class="col-name">主频 (Dominant Freq)</td><td class="col-value">380</td><td class="col-unit">Hz</td><td class="col-desc">频谱中能量分布最高的频率点</td></tr>
+                <tr><td class="col-name">频率分布范围</td><td class="col-value">180 - 850</td><td class="col-unit">Hz</td><td class="col-desc">集中了90%以上能量的频段</td></tr>
+                <tr><td class="col-name">频谱质心</td><td class="col-value">420</td><td class="col-unit">Hz</td><td class="col-desc">反映声音音色的“明亮”程度</td></tr>
+                <tr><td class="col-name">频谱熵</td><td class="col-value">0.85</td><td class="col-unit">-</td><td class="col-desc">评估频谱复杂度和不规则性</td></tr>
+            </tbody>
+        </table>
+
+        <table>
+            <thead>
+                <tr>
+                    <th colspan="4" style="background-color: #e2e8f0; text-align: left; padding-left: 15px;">1.3 能量特征 (Energy Features)</th>
+                </tr>
+                <tr><th>分析指标</th><th>检测数值</th><th>单位</th><th>临床物理意义</th></tr>
+            </thead>
+            <tbody>
+                <tr><td class="col-name">均方根能量 (RMS)</td><td class="col-value">0.52</td><td class="col-unit">mV²</td><td class="col-desc">信号整体声学能量的平均水平</td></tr>
+                <tr><td class="col-name">能量爆发率</td><td class="col-value">18.2</td><td class="col-unit">%</td><td class="col-desc">高能量活动占总时间的比例</td></tr>
+                <tr><td class="col-name">高/低频能量比</td><td class="col-value">1.05</td><td class="col-unit">-</td><td class="col-desc">肠鸣音音调偏高或偏低的量化体现</td></tr>
+            </tbody>
+        </table>
+
+        <h2>2. 统计分析评估（Statistical Evaluation）</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>统计评价指标</th>
+                    <th>当前评估值</th>
+                    <th>健康参考范围</th>
+                    <th>结论偏差判定</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="col-name">基础动力学频率</td>
+                    <td class="col-value">4.8 <span style="font-size:12px;color:#64748b;font-weight:normal;">/min</span></td>
+                    <td class="col-unit">4.0 - 5.0</td>
+                    <td class="col-desc" style="text-align: center; color: #0f172a; font-weight: bold;">
+                         ✔ 正常
+                    </td>
+                </tr>
+                <tr>
+                    <td class="col-name">平滑能量水平 (RMS)</td>
+                    <td class="col-value">0.52 <span style="font-size:12px;color:#64748b;font-weight:normal;">mV²</span></td>
+                    <td class="col-unit">0.3 - 0.6</td>
+                    <td class="col-desc" style="text-align: center; color: #0f172a; font-weight: bold;">
+                         ✔ 正常
+                    </td>
+                </tr>
+                <tr>
+                    <td class="col-name">肠鸣间隔规律性</td>
+                    <td class="col-value">12.5 <span style="font-size:12px;color:#64748b;font-weight:normal;">s</span></td>
+                    <td class="col-unit">12.0 - 15.0</td>
+                    <td class="col-desc" style="text-align: center; color: #0f172a; font-weight: bold;">
+                         ✔ 正常
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>3. 肠鸣音事件触发记录（Event Detail Tracking）</h2>
+        <div style="font-size: 12px; color: #64748b; margin-bottom: 10px;">
+            * 本表记录了音频采集片段中被算法成功识别与分割的所有独立肠鸣音事件明细。
+        </div>
+        <table class="event-table">
+            <thead>
+                <tr>
+                    <th style="width: 10%;">序号 (No.)</th>
+                    <th style="width: 30%;">声学事件类型 (Type)</th>
+                    <th style="width: 20%;">起始点 (Start)</th>
+                    <th style="width: 20%;">结束点 (End)</th>
+                    <th style="width: 20%;">事件时长 (Duration)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="col-value">1</td>
+                    <td class="col-name"><span style="color: #16a34a;">●</span> 典型肠鸣音</td>
+                    <td class="col-value">02.15 s</td>
+                    <td class="col-value">02.42 s</td>
+                    <td class="col-value">270 ms</td>
+                </tr>
+                <tr>
+                    <td class="col-value">2</td>
+                    <td class="col-name"><span style="color: #16a34a;">●</span> 典型肠鸣音</td>
+                    <td class="col-value">15.30 s</td>
+                    <td class="col-value">15.65 s</td>
+                    <td class="col-value">350 ms</td>
+                </tr>
+                <tr>
+                    <td class="col-value">3</td>
+                    <td class="col-name"><span style="color: #dc2626;">▲</span> 高频/亢进音</td>
+                    <td class="col-value">28.05 s</td>
+                    <td class="col-value">28.60 s</td>
+                    <td class="col-value">550 ms</td>
+                </tr>
+                <tr>
+                    <td class="col-value">4</td>
+                    <td class="col-name"><span style="color: #16a34a;">●</span> 典型肠鸣音</td>
+                    <td class="col-value">35.10 s</td>
+                    <td class="col-value">35.32 s</td>
+                    <td class="col-value">220 ms</td>
+                </tr>
+                <tr>
+                    <td class="col-value">5</td>
+                    <td class="col-name"><span style="color: #ca8a04;">◆</span> 微弱蠕动音</td>
+                    <td class="col-value">50.45 s</td>
+                    <td class="col-value">50.60 s</td>
+                    <td class="col-value">150 ms</td>
+                </tr>
+                <tr>
+                    <td class="col-value">6</td>
+                    <td class="col-name"><span style="color: #16a34a;">●</span> 典型肠鸣音</td>
+                    <td class="col-value">62.15 s</td>
+                    <td class="col-value">62.48 s</td>
+                    <td class="col-value">330 ms</td>
+                </tr>
+                <tr>
+                    <td class="col-value">7</td>
+                    <td class="col-name"><span style="color: #dc2626;">▲</span> 高频/亢进音</td>
+                    <td class="col-value">78.90 s</td>
+                    <td class="col-value">79.35 s</td>
+                    <td class="col-value">450 ms</td>
+                </tr>
+                <tr>
+                    <td class="col-value">8</td>
+                    <td class="col-name"><span style="color: #16a34a;">●</span> 典型肠鸣音</td>
+                    <td class="col-value">90.10 s</td>
+                    <td class="col-value">90.41 s</td>
+                    <td class="col-value">310 ms</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="page-footer">
+            <div>声学算法内核版本: V2.4.1 Alpha</div>
+            <div>报告生成编号: <span class="header-id">AS-20260313-0098</span></div>
+            <div>- 仅供音频特征数据参考 -</div>
+        </div>
+
+    </div>
+</body>
+</html>

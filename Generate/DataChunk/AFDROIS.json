@@ -1,0 +1,272 @@
+﻿{
+	"//": "AFDROIS 报告模板（肠音识别与特征提取报告 — Abdominal Feature Detection Result and Observation Identification Summary）。此文件为数据结构模板，程序运行时读取并与实际计算数据合并后生成最终报告 JSON。",
+	"schema": "BSSAS.ReportPayload",
+	"schemaVersion": "1.0",
+	"reportKind": "AFDROIS",
+	"meta": {
+		"_doc": "报告元数据。reportId=报告唯一编号；reportKind=报告类型标识；generatedAt=生成时间；dataSource=数据来源(WAV/DAQ等)；reportType=报告类型全名；application=生成该报告的应用程序名",
+		"reportId": "AFDROIS-20260101-0001",
+		"reportKind": "AFDROIS",
+		"generatedAt": "2026-01-01 00:00:00",
+		"dataSource": "WAV",
+		"reportType": "IdentificationAndFeatureExtraction",
+		"application": "BSSASApp"
+	},
+	"cachedData": {
+		"_doc": "图表渲染缓存数据（供前端绘图使用），包含波形点集、频谱点集和特征值序列",
+		"waveform": {
+			"_doc": "波形缓存。sampleRate=采样率(Hz)；durationSeconds=信号总时长(s)；downsampledPoints=降采样后的波形点集，每个点 {x: 时间/s, y: 幅值}",
+			"sampleRate": 0,
+			"durationSeconds": 0.0,
+			"downsampledPoints": [
+				{
+					"x": 0.0,
+					"y": 0.0
+				}
+			]
+		},
+		"spectrum": {
+			"_doc": "频谱缓存。boundaryHz=频谱显示上限频率(Hz)；points=频谱数据点集，每个点 {x: 频率/Hz, y: 幅值/dB}",
+			"boundaryHz": 0.0,
+			"points": [
+				{
+					"x": 0.0,
+					"y": 0.0
+				}
+			]
+		},
+		"featureValues": {
+			"_doc_基本参数": "sampleRate=采样率(Hz)；sampleCount=采样点总数；frameLengthMs=分析帧长(ms)；frameShiftMs=帧移(ms)",
+			"_doc_检测阈值": "maxSilenceMs=最大静音段长度(ms)；thresholdT=综合检测阈值；steThreshold=短时能量阈值；zcrThreshold=过零率阈值；fdThreshold=分形维数阈值；logEnergyThreshold=对数能量阈值；envelopePeakThreshold=包络峰值阈值；transientThreshold=瞬态检测阈值；spectralEntropyUpperBound=频谱熵上界",
+			"_doc_时域特征序列": "steValues=短时能量序列；zcrValues=过零率序列；fdValues=分形维数序列；logSteValues=对数短时能量序列；envelopePeakValues=包络峰值序列；envelopeSlopeValues=包络斜率序列；kurtosisValues=峭度序列",
+			"_doc_频域特征序列": "subbandLowValues=低频子带能量序列(0-150Hz)；subbandMidValues=中频子带能量序列(150-500Hz)；subbandHighValues=高频子带能量序列(500-1200Hz)；dominantFreqValues=主频序列；spectralCentroidValues=谱质心序列；spectralBandwidthValues=谱带宽序列；spectralRolloffValues=谱滚降序列；spectralEntropyValues=频谱熵序列",
+			"_doc_小波与Log-Mel序列": "multiscaleEnergy1/2/3Values=多尺度能量序列(sym6小波第1/2/3层细节均方能量)；waveletEntropyValues=小波熵序列(跨尺度能量分布熵)；transientStrengthValues=瞬态强度序列；logMel1/2/3Values=Log-Mel统计序列(26个Mel三角滤波器的低/中/高频段对数能量均值，80Hz-Nyquist)",
+			"_doc_候选与识别结果": "candidateScoreValues=候选段综合评分序列；candidateFrameMask=候选帧掩码(布尔型逐帧数组)；candidateSegments=候选肠音事件段列表；candidateEventCount=候选事件总数；recognizedSegments=已识别肠音事件段列表；recognizedEventCount=已识别事件总数；recognizedTotalDurationMs=已识别事件总时长(ms)；hasBowelSound=是否检测到肠音",
+			"sampleRate": 0,
+			"sampleCount": 0,
+			"frameLengthMs": 0.0,
+			"frameShiftMs": 0.0,
+			"maxSilenceMs": 0.0,
+			"thresholdT": 0.0,
+			"steThreshold": 0.0,
+			"zcrThreshold": 0.0,
+			"fdThreshold": 0.0,
+			"logEnergyThreshold": 0.0,
+			"envelopePeakThreshold": 0.0,
+			"transientThreshold": 0.0,
+			"spectralEntropyUpperBound": 0.0,
+			"steValues": [],
+			"zcrValues": [],
+			"fdValues": [],
+			"logSteValues": [],
+			"envelopePeakValues": [],
+			"envelopeSlopeValues": [],
+			"kurtosisValues": [],
+			"subbandLowValues": [],
+			"subbandMidValues": [],
+			"subbandHighValues": [],
+			"dominantFreqValues": [],
+			"spectralCentroidValues": [],
+			"spectralBandwidthValues": [],
+			"spectralRolloffValues": [],
+			"spectralEntropyValues": [],
+			"multiscaleEnergy1Values": [],
+			"multiscaleEnergy2Values": [],
+			"multiscaleEnergy3Values": [],
+			"waveletEntropyValues": [],
+			"transientStrengthValues": [],
+			"logMel1Values": [],
+			"logMel2Values": [],
+			"logMel3Values": [],
+			"candidateScoreValues": [],
+			"candidateFrameMask": [],
+			"candidateSegments": [],
+			"candidateEventCount": 0,
+			"recognizedSegments": [],
+			"recognizedEventCount": 0,
+			"recognizedTotalDurationMs": 0.0,
+			"hasBowelSound": false
+		}
+	},
+	"reportData": {
+		"_doc": "报告正文数据，包含候选段、识别段、多维特征导出矩阵、帧级特征统计以及PDF模板渲染变量",
+		"templateName": "AFDROIS",
+		"candidateSegments": [
+			{
+				"_doc": "候选肠音事件段。candidateIndex=候选段序号；startSeconds=起始时间(s)；endSeconds=结束时间(s)；durationMs=持续时长(ms)",
+				"candidateIndex": 1,
+				"startSeconds": 0.0,
+				"endSeconds": 0.0,
+				"durationMs": 0.0
+			}
+		],
+		"recognizedSegments": [
+			{
+				"_doc": "已识别肠音事件段。当前分析器会输出事件定位、时域统计、频域统计、候选评分与最终判定结果；导出时这些字段会直接进入 reportData.recognizedSegments 与 eventFeatureExport。",
+				"eventIndex": 1,
+				"startSample": 0,
+				"endSample": 0,
+				"startSeconds": 0.0,
+				"endSeconds": 0.0,
+				"durationMs": 0.0,
+				"peakAmplitude": 0.0,
+				"fdMean": 0.0,
+				"rms": 0.0,
+				"spectralEntropyMean": 0.0,
+				"dominantFreqMean": 0.0,
+				"eventType": "典型肠鸣音",
+				"acousticEventType": "典型肠鸣音",
+				"eventScore": 0.0,
+				"isRecognized": true
+			}
+		],
+		"eventFeatureExport": {
+			"_doc": "事件多维特征导出。version=版本；eventCount=事件总数；featureCount=特征维数；normalization=归一化公式说明；featureOrder=特征排列顺序；featureStats=各特征统计(均值/标准差/最值)；events=每个事件的逐特征值(原始/Z-Score/Min-Max归一化)。featureOrder 已同步当前分析器 buildRecognizedEvent 的 35 维输出。",
+			"version": "1.0",
+			"eventCount": 0,
+			"featureCount": 0,
+			"normalization": {
+				"_doc": "归一化计算公式说明（仅供参考，不参与计算）",
+				"zscore": "(x-mean)/std",
+				"minmax": "(x-min)/(max-min)"
+			},
+			"featureOrder": [
+				"durationMs",
+				"peakAmplitude",
+				"peakToPeakAmplitude",
+				"rms",
+				"peakLogEnergy",
+				"energyIntegral",
+				"envelopePeak",
+				"envelopeSlopeMean",
+				"transientPeak",
+				"transientMean",
+				"kurtosisMean",
+				"spectralEntropyMean",
+				"spectralEntropyStd",
+				"spectralCentroidMean",
+				"bandwidthMean",
+				"rolloffMean",
+				"dominantFreqMean",
+				"subbandLowEnergy",
+				"subbandMidEnergy",
+				"subbandHighEnergy",
+				"subbandEntropy",
+				"multiscaleEnergy1",
+				"multiscaleEnergy2",
+				"multiscaleEnergy3",
+				"waveletEntropyMean",
+				"logMel1Mean",
+				"logMel2Mean",
+				"logMel3Mean",
+				"fdWeakMean",
+				"candidateDensity",
+				"candidateScoreMean",
+				"maxCandidateScore",
+				"silenceContrast",
+				"eventScore"
+			],
+			"featureStats": [
+				{
+					"_doc": "单个特征的全局统计。name=特征名；mean=均值；std=标准差；min=最小值；max=最大值",
+					"name": "durationMs",
+					"mean": 0.0,
+					"std": 0.0,
+					"min": 0.0,
+					"max": 0.0
+				}
+			],
+			"events": [
+				{
+					"_doc": "单个事件特征记录。eventIndex=事件序号；isRecognized=是否被识别为肠音；startSeconds/endSeconds=起止时间(s)；durationMs=时长(ms)；rawFeatures=原始特征值；zscoreFeatures=Z-Score归一化特征；minmaxFeatures=Min-Max归一化特征",
+					"eventIndex": 1,
+					"isRecognized": true,
+					"startSeconds": 0.0,
+					"endSeconds": 0.0,
+					"durationMs": 0.0,
+					"rawFeatures": {
+						"durationMs": 0.0
+					},
+					"zscoreFeatures": {
+						"durationMs": 0.0
+					},
+					"minmaxFeatures": {
+						"durationMs": 0.0
+					}
+				}
+			],
+			"matrixRaw": [
+				[0.0]
+			],
+			"matrixZScore": [
+				[0.0]
+			],
+			"matrixMinMax": [
+				[0.0]
+			]
+		},
+		"featureStats": {
+			"_doc": "全段帧级特征统计。ste=短时能量(Short-Time Energy)；zcr=过零率(Zero-Crossing Rate)；fd=分形维数(Fractal Dimension)。每项包含：count=帧数；min/max=最小/最大值；mean=均值；preview=前N帧值的预览字符串(逗号分隔)",
+			"ste": {
+				"count": 0,
+				"min": 0.0,
+				"max": 0.0,
+				"mean": 0.0,
+				"preview": ""
+			},
+			"zcr": {
+				"count": 0,
+				"min": 0.0,
+				"max": 0.0,
+				"mean": 0.0,
+				"preview": ""
+			},
+			"fd": {
+				"count": 0,
+				"min": 0.0,
+				"max": 0.0,
+				"mean": 0.0,
+				"preview": ""
+			}
+		},
+		"templateContext": {
+			"_doc_基本信息": "report_id=报告编号；record_date=采集日期；data_source=数据来源；has_bowel_sound=是否检测到肠音",
+			"_doc_信号参数": "sample_rate=采样率(含单位)；sample_count=采样点总数；signal_duration_seconds=信号时长(含单位)；feature_frame_count=特征分析帧总数",
+			"_doc_识别结果": "recognized_event_count=识别到的肠音事件数；recognized_total_duration_ms=所有被识别事件的总时长(含单位)",
+			"_doc_时域统计(td)": "td_total_events=总事件数；td_events_per_min=每分钟事件数；td_avg_duration=平均时长(ms)；td_avg_interval=平均间隔(ms)；td_peak_amp=峰值幅度",
+			"_doc_频域统计(fd)": "fd_dom_freq=主频(Hz)；fd_freq_range=频率范围字符串(Hz)；fd_spec_centroid=谱质心(Hz)；fd_spec_entropy=频谱熵",
+			"_doc_能量特征(ef)": "ef_rms_energy=RMS能量；ef_burst_rate=爆发率；ef_hl_ratio=高低频能量比",
+			"_doc_统计分析(sa)": "sa_freq_curr=当前肠音频率(次/min)；sa_freq_dev=频率偏差评估结论；sa_rms_curr=当前RMS能量；sa_rms_normal=RMS正常参考范围；sa_rms_dev=RMS偏差评估结论；sa_int_curr=当前平均间隔(s)；sa_int_dev=间隔偏差评估结论",
+			"report_id": "AFDROIS-20260101-0001",
+			"record_date": "2026-01-01",
+			"data_source": "WAV",
+			"has_bowel_sound": "No",
+			"sample_rate": "0 Hz",
+			"sample_count": "0",
+			"signal_duration_seconds": "0.000 s",
+			"feature_frame_count": "0",
+			"recognized_event_count": "0",
+			"recognized_total_duration_ms": "0.000 ms",
+			"td_total_events": "0",
+			"td_events_per_min": "0.00",
+			"td_avg_duration": "0.00",
+			"td_avg_interval": "0.00",
+			"td_peak_amp": "0.0000",
+			"fd_dom_freq": "0.00",
+			"fd_freq_range": "0.00 - 0.00",
+			"fd_spec_centroid": "0.00",
+			"fd_spec_entropy": "0.0000",
+			"ef_rms_energy": "0.000000",
+			"ef_burst_rate": "0.00",
+			"ef_hl_ratio": "0.0000",
+			"sa_freq_curr": "0.00",
+			"sa_freq_dev": "Normal",
+			"sa_rms_curr": "0.000000",
+			"sa_rms_normal": "0.0010 - 1.0000",
+			"sa_rms_dev": "Normal",
+			"sa_int_curr": "0.00",
+			"sa_int_dev": "Normal"
+		}
+	}
+}
+

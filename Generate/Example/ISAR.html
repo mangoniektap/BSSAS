@@ -1,0 +1,947 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>肠鸣音分析报告</title>
+    <style>
+        /* 基础重置与全局字体 */
+        body {
+            font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', 'SimHei', sans-serif;
+            background-color: #f1f5f9;
+            color: #1e293b;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+        }
+
+        /* A4 纸张模拟容器 */
+        .report-container {
+            background: #ffffff;
+            width: 100%;
+            max-width: 880px;
+            margin: 0 auto;
+            padding: 50px 60px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            border-top: 10px solid #1e293b;
+            box-sizing: border-box;
+            border-radius: 4px;
+            position: relative;
+        }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #cbd5e1;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+            font-size: 13px;
+            color: #475569;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        .signature-date {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 16px;
+            font-size: 12px;
+            color: #64748b;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        .header-id {
+            color: #0f172a;
+            font-weight: bold;
+            font-size: 15px;
+        }
+
+        @media print {
+            body {
+                background: none;
+                padding: 0;
+            }
+
+            .report-container {
+                box-shadow: none;
+                border-top: none;
+                padding: 0;
+                max-width: 100%;
+            }
+
+            tr {
+                page-break-inside: avoid;
+            }
+
+            h2 {
+                page-break-after: avoid;
+            }
+        }
+
+        /* 标题排版 */
+        h1 {
+            text-align: center;
+            color: #0f172a;
+            font-size: 28px;
+            letter-spacing: 2px;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+
+        .main-subtitle {
+            text-align: center;
+            color: #64748b;
+            font-size: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 35px;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 20px;
+        }
+
+        /* 章节标题 */
+        h2 {
+            font-size: 17px;
+            color: #ffffff;
+            background-color: #334155;
+            padding: 8px 16px;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            border-radius: 3px;
+            display: inline-block;
+            width: 100%;
+            box-sizing: border-box;
+            letter-spacing: 1px;
+        }
+
+        h3 {
+            font-size: 15px;
+            color: #0f172a;
+            border-left: 4px solid #3b82f6;
+            padding-left: 12px;
+            margin-top: 25px;
+            margin-bottom: 15px;
+        }
+
+        /* 网格对齐系统（核心排版） */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            column-gap: 40px;
+            row-gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .grid-1 {
+            display: grid;
+            grid-template-columns: 1fr;
+            row-gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        /* 表单项对齐：让下划线自动填满剩余空间，实现右侧对齐 */
+        .form-item {
+            display: flex;
+            align-items: baseline;
+            width: 100%;
+        }
+
+        .label {
+            font-weight: bold;
+            color: #334155;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        .value-line {
+            flex-grow: 1;
+            border-bottom: 1px solid #475569;
+            margin: 0 8px;
+            text-align: center;
+            color: #0284c7; /* 专业医疗蓝 */
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+            font-size: 15px;
+            min-width: 40px;
+            padding-bottom: 2px;
+        }
+
+        .suffix {
+            color: #334155;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+
+        /* 纯文本/长文本 下划线 */
+        .value-inline {
+            border-bottom: 1px solid #475569;
+            padding: 0 10px;
+            color: #0284c7;
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+            display: inline-block;
+        }
+
+        /* 备注和小字 */
+        .note {
+            font-size: 12px;
+            color: #94a3b8;
+            font-weight: normal;
+        }
+
+        /* 复选框组：等距排列 */
+        .checkbox-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px 25px;
+            padding-top: 5px;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            font-size: 14px;
+            color: #1e293b;
+        }
+
+        .cb {
+            font-size: 18px;
+            margin-right: 6px;
+            color: #0f172a;
+        }
+
+        /* 表格精美排版 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            margin-bottom: 25px;
+            font-size: 13px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        th, td {
+            border: 1px solid #cbd5e1;
+            padding: 12px 15px;
+        }
+
+        th {
+            background-color: #f8fafc;
+            color: #0f172a;
+            font-weight: bold;
+            text-align: center;
+            border-bottom: 2px solid #94a3b8;
+        }
+
+        td.col-name {
+            text-align: left;
+            font-weight: 500;
+            color: #334155;
+            width: 30%;
+        }
+
+        td.col-value {
+            text-align: center;
+            color: #0284c7;
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+            font-size: 14px;
+            width: 20%;
+        }
+
+        td.col-unit {
+            text-align: center;
+            color: #64748b;
+            width: 15%;
+        }
+
+        td.col-desc {
+            text-align: left;
+            color: #64748b;
+        }
+
+        /* 隔行换色 */
+        tbody tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+
+        /* 文本域 / 结论区域 */
+        .text-box {
+            width: 100%;
+            border: 1px solid #cbd5e1;
+            padding: 15px 20px;
+            border-radius: 4px;
+            min-height: 80px;
+            box-sizing: border-box;
+            background: #f8fafc;
+            color: #1e293b;
+            font-size: 14px;
+            margin-top: 8px;
+            line-height: 1.8;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);
+        }
+
+        /* 示例参考框 */
+        .example-box {
+            background-color: #f0fdf4;
+            border-left: 4px solid #22c55e;
+            padding: 12px 15px;
+            font-size: 12px;
+            color: #166534;
+            margin-bottom: 20px;
+            border-radius: 0 4px 4px 0;
+        }
+
+        .signature-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+            margin-top: 60px;
+            padding-top: 30px;
+            border-top: 2px dashed #cbd5e1;
+        }
+
+        .sign-box {
+            font-size: 14px;
+            color: #334155;
+        }
+
+        .sign-title {
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #0f172a;
+        }
+
+        .sign-line-container {
+            display: flex;
+            align-items: baseline;
+            margin-bottom: 10px;
+        }
+
+        .sign-line {
+            flex-grow: 1;
+            border-bottom: 1px solid #0f172a;
+            margin-left: 5px;
+            min-width: 80px;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="report-container">
+        <div class="page-header">
+            <div>受试者编号: <span class="header-id">BS-2026-0012</span></div>
+            <div>检查日期: <span style="color: #0f172a; font-weight:bold;">2026-03-12</span></div>
+        </div>
+
+        <h1>肠鸣音分析报告</h1>
+        <div class="main-subtitle">Bowel Sound Analysis Report</div>
+
+        <h2>1. 基本信息（Basic Information）</h2>
+        <div class="grid-2">
+            <div class="form-item">
+                <span class="label">受试者编号（Subject ID）：</span>
+                <span class="value-line">BS-2026-0012</span>
+            </div>
+            <div class="form-item">
+                <span class="label">性别（Sex）：</span>
+                <div class="checkbox-container" style="margin-left: 15px; padding-top: 0;">
+                    <span class="checkbox-item"><span class="cb">☑</span> 男（Male）</span>
+                    <span class="checkbox-item"><span class="cb">☐</span> 女（Female）</span>
+                </div>
+            </div>
+            <div class="form-item">
+                <span class="label">年龄（Age）：</span>
+                <span class="value-line">45</span>
+                <span class="suffix">岁（Years）</span>
+            </div>
+            <div class="form-item">
+                <span class="label">身高/体重（Height/Weight）：</span>
+                <span class="value-line">175</span><span class="suffix">cm /</span>
+                <span class="value-line">70.5</span><span class="suffix">kg</span>
+            </div>
+        </div>
+        <div class="grid-1">
+            <div class="form-item">
+                <span class="label">既往病史（Medical History）：</span>
+                <span class="value-line" style="text-align: left; padding-left: 10px;">既往体健，无腹部手术史</span>
+            </div>
+            <div class="form-item">
+                <span class="label">当前症状（Symptoms）：</span>
+                <span class="value-line" style="text-align: left; padding-left: 10px;">间歇性轻微腹胀伴右下腹隐痛</span>
+            </div>
+        </div>
+        <div class="grid-2">
+            <div class="form-item">
+                <span class="label">检查日期（Date）：</span>
+                <span class="value-line">2026</span><span class="suffix">年</span>
+                <span class="value-line">03</span><span class="suffix">月</span>
+                <span class="value-line">12</span><span class="suffix">日</span>
+            </div>
+            <div class="form-item">
+                <span class="label">检测人员（Examiner）：</span>
+                <span class="value-line">张医生</span>
+            </div>
+        </div>
+        <div class="grid-1">
+            <div class="form-item">
+                <span class="label">备注（Remarks）：</span>
+                <span class="value-line" style="text-align: left; padding-left: 10px;">受试者配合良好</span>
+            </div>
+        </div>
+
+        <h2>2. 检测设备与采集条件（Acquisition Setup）</h2>
+
+        <h3>2.1 设备信息（Equipment Information）</h3>
+        <div class="grid-2">
+            <div class="form-item">
+                <span class="label">采集设备型号（Device Model）：</span>
+                <span class="value-line">GastroSound Pro V2.0</span>
+            </div>
+            <div class="form-item" style="opacity: 0;"></div>
+        </div>
+        <div class="grid-1">
+            <div class="form-item" style="flex-wrap: wrap;">
+                <span class="label" style="margin-right: 15px;">传感器类型（Sensor Type）：</span>
+                <div class="checkbox-container">
+                    <span class="checkbox-item"><span class="cb">☐</span> 麦克风（Microphone）</span>
+                    <span class="checkbox-item"><span class="cb">☑</span> 电子听诊器（Electronic Stethoscope）</span>
+                    <span class="checkbox-item"><span class="cb">☐</span> 压电传感器（Piezoelectric Sensor）</span>
+                    <span class="checkbox-item"><span class="cb">☐</span> 其他：<span class="value-inline"></span></span>
+                </div>
+            </div>
+        </div>
+        <div class="grid-2">
+            <div class="form-item">
+                <span class="label">采样率（Sampling Rate）：</span>
+                <span class="value-line">4000</span>
+                <span class="suffix">Hz</span>
+            </div>
+            <div class="form-item">
+                <span class="label">位深（Bit Depth）：</span>
+                <span class="value-line">16</span>
+                <span class="suffix">bit</span>
+            </div>
+        </div>
+
+        <h3>2.2 采集环境（Acquisition Environment）</h3>
+        <div class="grid-1">
+            <div class="form-item">
+                <span class="label" style="margin-right: 15px;">采集环境类型（Environment Type）：</span>
+                <div class="checkbox-container">
+                    <span class="checkbox-item"><span class="cb">☐</span> 安静实验室（Quiet Laboratory）</span>
+                    <span class="checkbox-item"><span class="cb">☑</span> 病房（Ward）</span>
+                    <span class="checkbox-item"><span class="cb">☐</span> 其他：<span class="value-inline"></span></span>
+                </div>
+            </div>
+        </div>
+
+        <h3>2.3 采集位置（Acquisition Position）</h3>
+        <div class="grid-1">
+            <div class="form-item">
+                <span class="label">腹部象限（Abdominal Quadrants）：</span>
+                <span class="note" style="margin-left: 10px;">（可多选，注明采集顺序）</span>
+            </div>
+            <div class="checkbox-container" style="padding-left: 20px;">
+                <span class="checkbox-item" style="width: 45%;"><span class="cb">☑</span> 右上腹（RUQ - Right Upper Quadrant）</span>
+                <span class="checkbox-item" style="width: 45%;"><span class="cb">☑</span> 左上腹（LUQ - Left Upper Quadrant）</span>
+                <span class="checkbox-item" style="width: 45%;"><span class="cb">☑</span> 右下腹（RLQ - Right Lower Quadrant）</span>
+                <span class="checkbox-item" style="width: 45%;"><span class="cb">☑</span> 左下腹（LLQ - Left Lower Quadrant）</span>
+            </div>
+            <div class="form-item" style="margin-top: 10px;">
+                <span class="label">具体采集点描述（Specific Point）：</span>
+                <span class="value-line" style="text-align: left; padding-left: 10px;">依次于脐周四个象限各5cm处采集</span>
+            </div>
+        </div>
+
+        <h3>2.4 采集时长（Acquisition Duration）</h3>
+        <div class="grid-2">
+            <div class="form-item">
+                <span class="label">每个象限采集时间：</span>
+                <span class="value-line">2.0</span>
+                <span class="suffix">min/象限</span>
+            </div>
+            <div class="form-item">
+                <span class="label">总记录时间：</span>
+                <span class="value-line">8.0</span>
+                <span class="suffix">min</span>
+            </div>
+        </div>
+        <div class="grid-1">
+            <div class="form-item">
+                <span class="label" style="margin-right: 15px;">采集间隔（Acquisition Interval）：</span>
+                <div class="checkbox-container">
+                    <span class="checkbox-item"><span class="cb">☑</span> 连续采集</span>
+                    <span class="checkbox-item"><span class="cb">☐</span> 间隔采集（间隔 <span class="value-inline">0</span> s）</span>
+                </div>
+            </div>
+        </div>
+
+        <h3>2.5 采集状态（Acquisition Status）</h3>
+        <div class="grid-1">
+            <div class="form-item">
+                <span class="label" style="margin-right: 15px;">进食状态（Eating Status）：</span>
+                <div class="checkbox-container">
+                    <span class="checkbox-item"><span class="cb">☑</span> 空腹（禁食 <span class="value-inline">12</span> h）</span>
+                    <span class="checkbox-item"><span class="cb">☐</span> 餐后（餐后 <span class="value-inline">0</span> h）</span>
+                    <span class="checkbox-item"><span class="cb">☐</span> 术后（术后 <span class="value-inline">0</span> h）</span>
+                </div>
+            </div>
+            <div class="form-item" style="margin-top: 5px;">
+                <span class="label" style="margin-right: 15px;">体位（Body Position）：</span>
+                <div class="checkbox-container">
+                    <span class="checkbox-item"><span class="cb">☑</span> 仰卧位</span>
+                    <span class="checkbox-item"><span class="cb">☐</span> 坐位</span>
+                    <span class="checkbox-item"><span class="cb">☐</span> 侧卧位（<span class="cb" style="margin-left: 5px;">☐</span> 左侧 <span class="cb" style="margin-left: 5px;">☐</span> 右侧）</span>
+                    <span class="checkbox-item"><span class="cb">☐</span> 其他：<span class="value-inline"></span></span>
+                </div>
+            </div>
+            <div class="form-item" style="margin-top: 5px;">
+                <span class="label" style="margin-right: 15px;">受试者状态（Subject Status）：</span>
+                <div class="checkbox-container">
+                    <span class="checkbox-item"><span class="cb">☑</span> 清醒安静</span>
+                    <span class="checkbox-item"><span class="cb">☐</span> 镇静状态</span>
+                    <span class="checkbox-item"><span class="cb">☐</span> 其他：<span class="value-inline"></span></span>
+                </div>
+            </div>
+        </div>
+
+        <h2>3. 数据预处理（Signal Preprocessing）</h2>
+
+        <h3>3.1 伪影去除（Artifact Removal）</h3>
+        <div class="grid-1">
+            <div class="checkbox-container" style="flex-direction: column; gap: 12px;">
+                <span class="checkbox-item"><span class="cb">☑</span> 体动伪影去除（Motion Artifact Removal）：方法 <span class="value-inline">自适应滤波去噪</span></span>
+                <span class="checkbox-item"><span class="cb">☑</span> 电源干扰去除（Power Line Interference Removal）：方法 <span class="value-inline">50Hz陷波滤波器</span></span>
+                <span class="checkbox-item"><span class="cb">☑</span> 其他伪影（如呼吸伪影）：方法 <span class="value-inline">带通滤波去除呼吸音 (100-1000Hz)</span></span>
+            </div>
+        </div>
+
+        <h3>3.2 分段方法（Segmentation Method）</h3>
+        <div class="grid-1">
+            <div class="checkbox-container" style="flex-direction: column; gap: 12px;">
+                <span class="checkbox-item"><span class="cb">☑</span> 阈值法（Threshold Method）：阈值 <span class="value-inline">0.15V</span> ，确定方式 <span class="value-inline">动态包络线自适应阈值</span></span>
+                <span class="checkbox-item"><span class="cb">☐</span> 机器学习模型（Machine Learning Model）：模型名称 <span class="value-inline"></span></span>
+                <span class="checkbox-item"><span class="cb">☐</span> 深度学习检测（Deep Learning Detection）：模型结构 <span class="value-inline"></span></span>
+                <span class="checkbox-item"><span class="cb">☐</span> 其他分段方法：<span class="value-inline"></span></span>
+            </div>
+            <div class="form-item" style="margin-top: 10px; width: 50%;">
+                <span class="label">分段长度（Segment Length）：</span>
+                <span class="value-line">200</span><span class="suffix">ms /</span>
+                <span class="value-line">0.2</span><span class="suffix">s</span>
+            </div>
+        </div>
+
+        <h2>4. 声学特征分析（Acoustic Feature Analysis）</h2>
+
+        <h3>4.1 时间域特征（Time-domain Features）</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>指标（Indicator）</th>
+                    <th>数值（Value）</th>
+                    <th>单位（Unit）</th>
+                    <th>备注（Remarks）</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="col-name">肠鸣音次数（Events）</td>
+                    <td class="col-value">4.5</td>
+                    <td class="col-unit">events/min</td>
+                    <td class="col-desc">每分钟肠鸣音发生次数</td>
+                </tr>
+                <tr>
+                    <td class="col-name">平均持续时间（Avg Duration）</td>
+                    <td class="col-value">250</td>
+                    <td class="col-unit">ms</td>
+                    <td class="col-desc">单次肠鸣音持续时间均值</td>
+                </tr>
+                <tr>
+                    <td class="col-name">最大持续时间（Max Duration）</td>
+                    <td class="col-value">480</td>
+                    <td class="col-unit">ms</td>
+                    <td class="col-desc">单次肠鸣音最长持续时间</td>
+                </tr>
+                <tr>
+                    <td class="col-name">最小持续时间（Min Duration）</td>
+                    <td class="col-value">120</td>
+                    <td class="col-unit">ms</td>
+                    <td class="col-desc">单次肠鸣音最短持续时间</td>
+                </tr>
+                <tr>
+                    <td class="col-name">平均间隔时间（Avg Interval）</td>
+                    <td class="col-value">13.2</td>
+                    <td class="col-unit">s</td>
+                    <td class="col-desc">两次肠鸣音之间的平均间隔</td>
+                </tr>
+                <tr>
+                    <td class="col-name">爆发率（Burst Rate）</td>
+                    <td class="col-value">15.5</td>
+                    <td class="col-unit">%</td>
+                    <td class="col-desc">肠鸣音爆发时段占总采集时间的比例</td>
+                </tr>
+                <tr>
+                    <td class="col-name">峰值振幅（Peak Amplitude）</td>
+                    <td class="col-value">0.85</td>
+                    <td class="col-unit">mV</td>
+                    <td class="col-desc">肠鸣音信号的最大振幅</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>4.2 频率域特征（Frequency-domain Features）</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>指标（Indicator）</th>
+                    <th>数值（Value）</th>
+                    <th>单位（Unit）</th>
+                    <th>备注（Remarks）</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="col-name">主频（Dominant Frequency）</td>
+                    <td class="col-value">350</td>
+                    <td class="col-unit">Hz</td>
+                    <td class="col-desc">频谱中能量最高的频率</td>
+                </tr>
+                <tr>
+                    <td class="col-name">频率范围（Frequency Range）</td>
+                    <td class="col-value">150 - 850</td>
+                    <td class="col-unit">Hz</td>
+                    <td class="col-desc">肠鸣音信号的主要频率区间</td>
+                </tr>
+                <tr>
+                    <td class="col-name">频谱质心（Spectral Centroid）</td>
+                    <td class="col-value">410</td>
+                    <td class="col-unit">Hz</td>
+                    <td class="col-desc">频谱能量的重心，反映频率分布特性</td>
+                </tr>
+                <tr>
+                    <td class="col-name">带宽（Bandwidth）</td>
+                    <td class="col-value">300</td>
+                    <td class="col-unit">Hz</td>
+                    <td class="col-desc">主频附近能量集中的频率范围</td>
+                </tr>
+                <tr>
+                    <td class="col-name">频谱熵（Spectral Entropy）</td>
+                    <td class="col-value">0.82</td>
+                    <td class="col-unit">-</td>
+                    <td class="col-desc">反映频谱的不规则程度，熵值越高越不规则</td>
+                </tr>
+                <tr>
+                    <td class="col-name">频谱通量（Spectral Flux）</td>
+                    <td class="col-value">0.15</td>
+                    <td class="col-unit">-</td>
+                    <td class="col-desc">相邻帧频谱的差异程度</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>4.3 能量特征（Energy Features）</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>指标（Indicator）</th>
+                    <th>数值（Value）</th>
+                    <th>单位（Unit）</th>
+                    <th>备注（Remarks）</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="col-name">RMS能量（RMS Energy）</td>
+                    <td class="col-value">0.45</td>
+                    <td class="col-unit">mV²</td>
+                    <td class="col-desc">均方根能量，反映信号能量的平均水平</td>
+                </tr>
+                <tr>
+                    <td class="col-name">峰值能量（Peak Energy）</td>
+                    <td class="col-value">1.2</td>
+                    <td class="col-unit">mV²</td>
+                    <td class="col-desc">肠鸣音信号的最大能量值</td>
+                </tr>
+                <tr>
+                    <td class="col-name">能量分布（Energy Distribution）</td>
+                    <td class="col-value" style="font-size: 13px;">低频占比 15%</td>
+                    <td class="col-unit">-</td>
+                    <td class="col-desc">低频段（200 Hz以下）能量占比</td>
+                </tr>
+                <tr>
+                    <td class="col-name">能量熵（Energy Entropy）</td>
+                    <td class="col-value">0.78</td>
+                    <td class="col-unit">-</td>
+                    <td class="col-desc">反映能量分布的均匀性</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>4.4 时频特征（Time-Frequency Features）</h3>
+        <div class="grid-1">
+            <div class="form-item"><span class="label">时频分析方法（Method）：</span></div>
+            <div class="checkbox-container" style="flex-direction: column; gap: 12px; padding-left: 15px;">
+                <span class="checkbox-item"><span class="cb">☑</span> STFT频谱图（Spectrogram）：窗长 <span class="value-inline">50</span> ms，重叠率 <span class="value-inline">50</span> %</span>
+                <span class="checkbox-item"><span class="cb">☐</span> 小波变换分析（Wavelet Transform）：小波基 <span class="value-inline"></span> ，分解层数 <span class="value-inline"></span></span>
+                <span class="checkbox-item"><span class="cb">☐</span> MFCC特征：系数个数 <span class="value-inline"></span> ，倒谱阶数 <span class="value-inline"></span></span>
+                <span class="checkbox-item"><span class="cb">☐</span> 其他时频方法：<span class="value-inline"></span></span>
+            </div>
+        </div>
+
+        <h2>5. 统计分析（Statistical Analysis）</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>指标（Indicator）</th>
+                    <th>当前值（Current Value）</th>
+                    <th>正常范围（Normal Range）</th>
+                    <th>偏离情况（Deviation）</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="col-name">肠鸣音频率（Frequency）</td>
+                    <td class="col-value">4.5 <span style="font-size:12px;color:#64748b;font-weight:normal;">/min</span></td>
+                    <td class="col-unit">4-5 /min</td>
+                    <td class="col-desc">
+                        <span class="cb" style="font-size: 14px;">☑</span> 正常
+                        <span class="cb" style="font-size: 14px; margin-left: 5px;">☐</span> 偏低
+                        <span class="cb" style="font-size: 14px; margin-left: 5px;">☐</span> 偏高
+                    </td>
+                </tr>
+                <tr>
+                    <td class="col-name">平均持续时间（Avg Duration）</td>
+                    <td class="col-value">250 <span style="font-size:12px;color:#64748b;font-weight:normal;">ms</span></td>
+                    <td class="col-unit">100-500 ms</td>
+                    <td class="col-desc">
+                        <span class="cb" style="font-size: 14px;">☑</span> 正常
+                        <span class="cb" style="font-size: 14px; margin-left: 5px;">☐</span> 偏短
+                        <span class="cb" style="font-size: 14px; margin-left: 5px;">☐</span> 偏长
+                    </td>
+                </tr>
+                <tr>
+                    <td class="col-name">RMS能量（RMS Energy）</td>
+                    <td class="col-value">0.45 <span style="font-size:12px;color:#64748b;font-weight:normal;">mV²</span></td>
+                    <td class="col-unit">0.3-0.6 mV²</td>
+                    <td class="col-desc">
+                        <span class="cb" style="font-size: 14px;">☑</span> 正常
+                        <span class="cb" style="font-size: 14px; margin-left: 5px;">☐</span> 偏低
+                        <span class="cb" style="font-size: 14px; margin-left: 5px;">☐</span> 偏高
+                    </td>
+                </tr>
+                <tr>
+                    <td class="col-name">平均间隔时间（Avg Interval）</td>
+                    <td class="col-value">13.2 <span style="font-size:12px;color:#64748b;font-weight:normal;">s</span></td>
+                    <td class="col-unit">12-15 s</td>
+                    <td class="col-desc">
+                        <span class="cb" style="font-size: 14px;">☑</span> 正常
+                        <span class="cb" style="font-size: 14px; margin-left: 5px;">☐</span> 偏短
+                        <span class="cb" style="font-size: 14px; margin-left: 5px;">☐</span> 偏长
+                    </td>
+                </tr>
+                <tr>
+                    <td class="col-name">主频（Dominant Frequency）</td>
+                    <td class="col-value">350 <span style="font-size:12px;color:#64748b;font-weight:normal;">Hz</span></td>
+                    <td class="col-unit">200-800 Hz</td>
+                    <td class="col-desc">
+                        <span class="cb" style="font-size: 14px;">☑</span> 正常
+                        <span class="cb" style="font-size: 14px; margin-left: 5px;">☐</span> 偏低
+                        <span class="cb" style="font-size: 14px; margin-left: 5px;">☐</span> 偏高
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>6. 模式识别/AI分析（Pattern Recognition/AI Analysis）</h2>
+        <div class="grid-1">
+            <div class="form-item"><span class="label">模型类型（Model Type）：</span></div>
+            <div class="checkbox-container" style="padding-left: 15px;">
+                <span class="checkbox-item"><span class="cb">☑</span> CNN（卷积神经网络）</span>
+                <span class="checkbox-item"><span class="cb">☐</span> Transformer</span>
+                <span class="checkbox-item"><span class="cb">☐</span> 随机森林</span>
+                <span class="checkbox-item"><span class="cb">☐</span> SVM</span>
+                <span class="checkbox-item"><span class="cb">☐</span> 其他：<span class="value-inline"></span></span>
+            </div>
+            <div class="form-item" style="margin-top: 15px;">
+                <span class="label">模型训练信息：</span>
+                <span class="suffix">训练集规模</span> <span class="value-inline">5000</span> ，
+                <span class="suffix">验证集规模</span> <span class="value-inline">1000</span> ，
+                <span class="suffix">测试集准确率</span> <span class="value-inline">96.5</span><span class="suffix">%</span>
+            </div>
+            <div class="form-item" style="margin-top: 15px;"><span class="label">输出结果（Output Results）：</span></div>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>分类（Classification）</th>
+                    <th>概率（Probability）</th>
+                    <th>判定结果（Judgment）</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="col-name">正常肠鸣音（Normal）</td>
+                    <td class="col-value">92.4 %</td>
+                    <td class="col-desc" style="text-align: center;"><span class="cb">☑</span> 是 <span class="cb" style="margin-left:15px;">☐</span> 否</td>
+                </tr>
+                <tr>
+                    <td class="col-name">肠动力减弱（Decreased Motility）</td>
+                    <td class="col-value">4.1 %</td>
+                    <td class="col-desc" style="text-align: center;"><span class="cb">☐</span> 是 <span class="cb" style="margin-left:15px;">☑</span> 否</td>
+                </tr>
+                <tr>
+                    <td class="col-name">肠梗阻风险（Obstruction Risk）</td>
+                    <td class="col-value">1.2 %</td>
+                    <td class="col-desc" style="text-align: center;"><span class="cb">☐</span> 是 <span class="cb" style="margin-left:15px;">☑</span> 否</td>
+                </tr>
+                <tr>
+                    <td class="col-name">肠易激综合征（IBS）</td>
+                    <td class="col-value">2.0 %</td>
+                    <td class="col-desc" style="text-align: center;"><span class="cb">☐</span> 是 <span class="cb" style="margin-left:15px;">☑</span> 否</td>
+                </tr>
+                <tr>
+                    <td class="col-name">其他：<span class="value-inline" style="font-size: 13px;">不明杂音</span></td>
+                    <td class="col-value">0.3 %</td>
+                    <td class="col-desc" style="text-align: center;"><span class="cb">☐</span> 是 <span class="cb" style="margin-left:15px;">☑</span> 否</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>8. 临床解释（Clinical Interpretation）</h2>
+        <div class="grid-1">
+            <div class="form-item"><span class="label">肠鸣音整体评估（Overall Evaluation）：</span></div>
+            <div class="checkbox-container" style="flex-direction: column; gap: 10px; padding-left: 15px;">
+                <span class="checkbox-item" style="align-items: flex-start;"><span class="cb">☑</span> <span style="padding-top:2px;">正常：肠鸣音频率、持续时间、能量等特征均在正常范围，提示肠道蠕动功能正常。</span></span>
+                <span class="checkbox-item" style="align-items: flex-start;"><span class="cb">☐</span> <span style="padding-top:2px;">异常：</span></span>
+                <div style="padding-left: 30px; color: #475569; font-size: 13px; line-height: 2;">
+                    • 肠鸣音频率偏低（<4 events /min）：提示肠动力减弱，可能与术后肠麻痹、早期梗阻等相关。<br>
+                • 肠鸣音频率偏高（>5 events/min）：提示肠动力增强，可能与肠易激、腹泻、炎症等相关。<br>
+                • 肠鸣音消失：持续 <span class="value-inline">0</span> min未检测到肠鸣音，提示严重肠麻痹或完全梗阻。<br>
+                • 其他异常：<span class="value-inline">无</span>
+                </div>
+            </div>
+
+            <div class="form-item" style="margin-top: 15px;"><span class="label">声学特征提示（Acoustic Feature Tips）：</span></div>
+            <div class="checkbox-container" style="padding-left: 15px;">
+                <span class="checkbox-item"><span class="cb">☑</span> 肠蠕动正常</span>
+                <span class="checkbox-item"><span class="cb">☐</span> 肠蠕动减弱</span>
+                <span class="checkbox-item"><span class="cb">☐</span> 肠蠕动增强</span>
+                <span class="checkbox-item"><span class="cb">☐</span> 肠道异常蠕动（如痉挛）</span>
+            </div>
+
+            <div class="form-item" style="margin-top: 15px;"><span class="label">可能关联疾病/状态（Possible Associated Conditions）：</span></div>
+            <div class="checkbox-container" style="padding-left: 15px;">
+                <span class="checkbox-item"><span class="cb">☐</span> 术后肠麻痹</span>
+                <span class="checkbox-item"><span class="cb">☐</span> 肠梗阻</span>
+                <span class="checkbox-item"><span class="cb">☐</span> 肠易激综合征</span>
+                <span class="checkbox-item"><span class="cb">☐</span> 急性胃肠炎</span>
+                <span class="checkbox-item"><span class="cb">☐</span> 便秘</span>
+                <span class="checkbox-item"><span class="cb">☐</span> 腹泻</span>
+                <span class="checkbox-item"><span class="cb">☐</span> 其他：<span class="value-inline"></span></span>
+            </div>
+
+            <div class="form-item" style="margin-top: 15px; flex-direction: column; align-items: flex-start;">
+                <span class="label">结合临床症状分析（Clinical Symptoms Analysis）：</span>
+                <div class="text-box">受试者虽诉有轻微腹胀，但各项肠鸣音特征（频率4.5次/分，平均持续时间250ms）均处于正常范围，主频未见明显漂移，提示当前肠道基础动力学正常，腹胀可能来源于其他非器质性因素。</div>
+            </div>
+        </div>
+
+        <h2>9. 结论（Conclusion）</h2>
+        <div class="example-box">
+            <strong>填写示例参考：</strong><br>
+            1. 本次检测显示，受试者肠鸣音频率为 4.5 events/min，平均持续时间 250 ms，各项特征均位于正常范围，提示肠道蠕动功能基本正常。<br>
+            2. 本次检测发现，受试者肠鸣音频率显著降低（1.2 events/min），声学特征提示肠动力减弱，结合既往术后史及腹胀症状，可能与术后肠麻痹相关。
+        </div>
+
+        <div class="grid-1">
+            <div class="form-item" style="flex-direction: column; align-items: flex-start;">
+                <span class="label">本次结论（Final Conclusion）：</span>
+                <div class="text-box" style="font-weight: bold; color: #0284c7;">本次检测显示，受试者肠鸣音频率为 4.5 events/min，平均持续时间 250 ms，RMS能量 0.45 mV²，各项声学特征、统计结果及AI模型分类均指向正常肠鸣音模式。提示肠道蠕动功能基本正常，未发现明显器质性动力异常。</div>
+            </div>
+            <div class="form-item" style="flex-direction: column; align-items: flex-start; margin-top: 10px;">
+                <span class="label">建议（Recommendation）：</span>
+                <div class="text-box">建议保持规律作息与正常饮食，适度运动。若腹部隐痛症状加重或出现其他不适，建议进一步完善腹部超声或胃肠镜等临床检查。</div>
+            </div>
+        </div>
+
+        <h2>12. 算法性能（Algorithm Performance）</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>性能指标（Performance Indicator）</th>
+                    <th>数值（Value）</th>
+                    <th>备注（Remarks）</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="col-name">准确率（Accuracy）</td>
+                    <td class="col-value">96.5 %</td>
+                    <td class="col-desc">模型预测正确的样本占总样本的比例</td>
+                </tr>
+                <tr>
+                    <td class="col-name">灵敏度（Sensitivity）</td>
+                    <td class="col-value">95.8 %</td>
+                    <td class="col-desc">正确识别阳性样本的比例</td>
+                </tr>
+                <tr>
+                    <td class="col-name">特异度（Specificity）</td>
+                    <td class="col-value">97.1 %</td>
+                    <td class="col-desc">正确识别阴性样本的比例</td>
+                </tr>
+                <tr>
+                    <td class="col-name">F1-score</td>
+                    <td class="col-value">0.96</td>
+                    <td class="col-desc">精确率与召回率的调和平均数</td>
+                </tr>
+                <tr>
+                    <td class="col-name">AUC（曲线下面积）</td>
+                    <td class="col-value">0.98</td>
+                    <td class="col-desc">ROC曲线下面积，反映模型区分能力</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="grid-1">
+            <div class="form-item" style="flex-direction: column; align-items: flex-start;">
+                <span class="label">算法优化方向（Optimization Direction）：</span>
+                <div class="text-box" style="min-height: 60px;">未来计划增加针对餐后高频肠鸣音特征的提取权重，以提升对轻度肠激惹状态的识别灵敏度。</div>
+            </div>
+        </div>
+
+        <h2>附录（Appendix）</h2>
+        <div class="grid-1">
+            <div class="text-box" style="min-height: 60px; background: #ffffff;">
+                图表1：四象限肠鸣音STFT时频谱图（详见系统附件）
+图表2：肠鸣音能量分布直方图（详见系统附件）
+            </div>
+        </div>
+
+        <div class="signature-section">
+            <div class="sign-box">
+                <div class="sign-title">报告签署（Signatures）</div>
+                <div class="sign-line-container">
+                    检测人员：<span class="sign-line"></span>
+                </div>
+            </div>
+            <div class="sign-box">
+                <div class="sign-title" style="opacity: 0;">占位</div>
+                <div class="sign-line-container">
+                    审核人员：<span class="sign-line"></span>
+                </div>
+            </div>
+            <div class="sign-box">
+                <div class="sign-title" style="opacity: 0;">占位</div>
+                <div class="sign-line-container">
+                    临床医师：<span class="sign-line"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="signature-date">
+            <div>签字日期: <span class="header-id">2026-03-13</span></div>
+        </div>
+
+    </div>
+</body>
+</html>
