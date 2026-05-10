@@ -1,6 +1,6 @@
 /**
- * @file About_Page.qml
- * @brief 关于页面。按 about_page_concept 展示系统海报、信息卡片、设计理念与页脚状态。
+ * @file About.qml
+ * @brief 关于页面。展示系统海报、信息卡片、设计理念与页脚状态。
  */
 pragma ComponentBehavior: Bound
 import QtQuick
@@ -27,22 +27,22 @@ Page {
         {
             "title": "实时采集",
             "description": "多通道高保真信号采集",
-            "icon": "ecg.svg"
+            "icon": "realtime_acquisition_icon.svg"
         },
         {
             "title": "时频分析",
             "description": "时域、频域及时频域分析",
-            "icon": "cones.svg"
+            "icon": "time_frequency_analysis_icon.svg"
         },
         {
             "title": "病历管理",
             "description": "数据存储与病例信息管理",
-            "icon": "document-folder.svg"
+            "icon": "medical_record_management_icon.svg"
         },
         {
             "title": "辅助诊断",
             "description": "智能识别与异常提示",
-            "icon": "medical-box.svg"
+            "icon": "auxiliary_diagnosis_icon.svg"
         }
     ]
     readonly property var versionItems: [
@@ -63,44 +63,44 @@ Page {
         {
             "title": "开发团队",
             "value": "医学信号智能分析团队",
-            "icon": "github.svg"
+            "icon": "development_team_icon.svg"
         },
         {
             "title": "联系邮箱",
             "value": "support@bowelsound.mangonienie",
-            "icon": "mail-unpacking.svg"
+            "icon": "support_email_icon.svg"
         },
         {
             "title": "官方网站",
             "value": "www.bowelsound.cn",
-            "icon": "earth.svg"
+            "icon": "official_website_icon.svg"
         },
         {
             "title": "工作时间",
             "value": "周一至周五 9:00 - 18:00",
-            "icon": "time.svg"
+            "icon": "working_hours_icon.svg"
         }
     ]
     readonly property var designItems: [
         {
             "title": "安全可靠",
             "description": "本地处理，隐私保护",
-            "icon": "shield-add.svg"
+            "icon": "security_reliability_icon.svg"
         },
         {
             "title": "轻量高效",
             "description": "性能优化，流畅体验",
-            "icon": "rocket-one.svg"
+            "icon": "lightweight_efficiency_icon.svg"
         },
         {
             "title": "本地部署",
             "description": "离线运行，独立可控",
-            "icon": "server.svg"
+            "icon": "local_deployment_icon.svg"
         },
         {
             "title": "易于扩展",
             "description": "模块化设计，灵活扩展",
-            "icon": "puzzle.svg"
+            "icon": "extensible_architecture_icon.svg"
         }
     ]
 
@@ -209,7 +209,7 @@ Page {
     }
 
     /**
-     * @brief 核心能力单行条目，图标顺序按需求固定为 ecg、cones、document-folder、medical-box。
+     * @brief 核心能力单行条目，图标顺序按需求固定为 realtime_acquisition_icon、time_frequency_analysis_icon、medical_record_management_icon、auxiliary_diagnosis_icon。
      */
     component AbilityRow: RowLayout {
         id: abilityRow
@@ -296,7 +296,7 @@ Page {
     }
 
     /**
-     * @brief 技术支持条目，图标顺序按需求固定为 github、mail-unpacking、earth、time。
+     * @brief 技术支持条目，图标顺序按需求固定为 development_team_icon、support_email_icon、official_website_icon、working_hours_icon。
      */
     component SupportRow: RowLayout {
         id: supportRow
@@ -433,7 +433,7 @@ Page {
                     width: root.posterWidth
                     height: root.posterHeight
                     anchors.horizontalCenter: parent.horizontalCenter
-                    source: root.asset("haibao.png")
+                    source: root.asset("header_poster.png")
                     sourceClipRect: Qt.rect(0, 74, 2171, 576)
                     fillMode: Image.PreserveAspectFit
                     smooth: true
@@ -450,7 +450,7 @@ Page {
 
                 InformationCard {
                     title: "系统简介"
-                    iconName: "sound-wave.svg"
+                    iconName: "system_intro_icon.svg"
 
                     Item {
                         anchors.fill: parent
@@ -471,10 +471,10 @@ Page {
                         Image {
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.bottom: parent.bottom
-                            anchors.bottomMargin: -17
+                            anchors.bottomMargin: -15
                             width: parent.width * root.waveImageScale
                             height: width / root.waveAspectRatio
-                            source: root.asset("wave.png")
+                            source: root.asset("intro_waveform_strip.png")
                             fillMode: Image.PreserveAspectFit
                             smooth: true
                             mipmap: true
@@ -484,7 +484,7 @@ Page {
 
                 InformationCard {
                     title: "核心能力"
-                    iconName: "star.svg"
+                    iconName: "core_capabilities_icon.svg"
 
                     ColumnLayout {
                         anchors.fill: parent
@@ -506,7 +506,7 @@ Page {
 
                 InformationCard {
                     title: "版本信息"
-                    iconName: "tips.svg"
+                    iconName: "version_info_icon.svg"
 
                     ColumnLayout {
                         anchors.fill: parent
@@ -563,7 +563,7 @@ Page {
 
                 InformationCard {
                     title: "技术支持"
-                    iconName: "airpods.svg"
+                    iconName: "technical_support_headset_icon.svg"
 
                     ColumnLayout {
                         anchors.fill: parent
@@ -585,7 +585,7 @@ Page {
             }
 
             /**
-             * 设计理念区块补齐构想图底部内容；标题图标使用 bydesign.svg，尺寸固定 40px。
+             * 设计理念区块补齐构想图底部内容；标题图标使用 design_philosophy_icon.svg，尺寸固定 40px。
              */
             Rectangle {
                 id: designPanel
@@ -615,7 +615,7 @@ Page {
                             Image {
                                 Layout.preferredWidth: 40
                                 Layout.preferredHeight: 40
-                                source: root.asset("bydesign.svg")
+                                source: root.asset("design_philosophy_icon.svg")
                                 sourceSize.width: width
                                 sourceSize.height: height
                                 fillMode: Image.PreserveAspectFit

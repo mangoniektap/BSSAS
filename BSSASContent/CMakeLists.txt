@@ -1,40 +1,5 @@
 qt_add_library(BSSASContent STATIC)
 
-set_source_files_properties(
-    "image resources/home page/home_bowel_sound_logo.png"
-    PROPERTIES QT_RESOURCE_ALIAS "images/home/home_bowel_sound_logo.png"
-)
-
-set_source_files_properties(
-    "image resources/home page/home_hero_intestine_waveform.png"
-    PROPERTIES QT_RESOURCE_ALIAS "images/home/home_hero_intestine_waveform.png"
-)
-
-set_source_files_properties(
-    "image resources/home page/home_metric_card_icons.png"
-    PROPERTIES QT_RESOURCE_ALIAS "images/home/home_metric_card_icons.png"
-)
-
-set_source_files_properties(
-    "image resources/home page/home_recent_signal_waveform.png"
-    PROPERTIES QT_RESOURCE_ALIAS "images/home/home_recent_signal_waveform.png"
-)
-
-set_source_files_properties(
-    "image resources/home page/home_security_badge_icon.png"
-    PROPERTIES QT_RESOURCE_ALIAS "images/home/home_security_badge_icon.png"
-)
-
-set_source_files_properties(
-    "image resources/home page/home_sidebar_nav_icons.png"
-    PROPERTIES QT_RESOURCE_ALIAS "images/home/home_sidebar_nav_icons.png"
-)
-
-set_source_files_properties(
-    "image resources/home page/home_system_status_icons.png"
-    PROPERTIES QT_RESOURCE_ALIAS "images/home/home_system_status_icons.png"
-)
-
 qt_add_qml_module(BSSASContent
     URI "BSSASContent"
     VERSION 1.0
@@ -47,11 +12,11 @@ qt_add_qml_module(BSSASContent
         "Right_Top_Toolbar.qml"
         "Left_Toolbar.qml"
         "Window_Display_Master_Control.qml"
-        "display_content/About_Page.qml"
+        "display_content/About.qml"
         "display_content/Auxiliary_Diagnosis.qml"
         "display_content/Software_Master_Control.qml"
         "display_content/Medical_Record_Management.qml"
-        "display_content/Home_Page.qml"
+        "display_content/Home.qml"
         "display_content/Temporal_Spectral_Monitoring.qml"
         "display_content/software_master_control_content/Signal_Processing_Settings.qml"
         "display_content/software_master_control_content/File_Management.qml"
@@ -74,15 +39,65 @@ qt_add_qml_module(BSSASContent
         "images/right.png"
         "images/search.png"
         "images/time.png"
-        "images/upload.png"
-        "images/whirlwind.png"
-        "image resources/home page/home_bowel_sound_logo.png"
-        "image resources/home page/home_hero_intestine_waveform.png"
-        "image resources/home page/home_metric_card_icons.png"
-        "image resources/home page/home_recent_signal_waveform.png"
-        "image resources/home page/home_security_badge_icon.png"
-        "image resources/home page/home_sidebar_nav_icons.png"
-        "image resources/home page/home_system_status_icons.png"
+        "image resources/auxiliary diagnosis/abnormal_recognition_step_icon.svg"
+        "image resources/auxiliary diagnosis/concept_diagram.png"
+        "image resources/auxiliary diagnosis/confidence_score_icon.svg"
+        "image resources/auxiliary diagnosis/diagnosis_advice_icon.svg"
+        "image resources/auxiliary diagnosis/diagnosis_advice_step_icon.svg"
+        "image resources/auxiliary diagnosis/estimated_duration_icon.svg"
+        "image resources/auxiliary diagnosis/feature_encoding_step_icon.svg"
+        "image resources/auxiliary diagnosis/info_notice_icon.svg"
+        "image resources/auxiliary diagnosis/model_inference_icon.svg"
+        "image resources/auxiliary diagnosis/recognition_result_icon.svg"
+        "image resources/auxiliary diagnosis/recognition_status_waveform.png"
+        "image resources/auxiliary diagnosis/signal_preprocessing_step_icon.svg"
+        "image resources/auxiliary diagnosis/upload_audio_step_icon.svg"
+        "image resources/Software Master Control/status_info_icons.png"
+        "image resources/about/auxiliary_diagnosis_icon.svg"
+        "image resources/about/concept_diagram.png"
+        "image resources/about/core_capabilities_icon.svg"
+        "image resources/about/design_philosophy_icon.svg"
+        "image resources/about/development_team_icon.svg"
+        "image resources/about/extensible_architecture_icon.svg"
+        "image resources/about/header_poster.png"
+        "image resources/about/intro_waveform_strip.png"
+        "image resources/about/lightweight_efficiency_icon.svg"
+        "image resources/about/local_deployment_icon.svg"
+        "image resources/about/medical_record_management_icon.svg"
+        "image resources/about/official_website_icon.svg"
+        "image resources/about/realtime_acquisition_icon.svg"
+        "image resources/about/security_reliability_icon.svg"
+        "image resources/about/support_email_icon.svg"
+        "image resources/about/system_intro_icon.svg"
+        "image resources/about/technical_support_headset_icon.svg"
+        "image resources/about/time_frequency_analysis_icon.svg"
+        "image resources/about/version_info_icon.svg"
+        "image resources/about/working_hours_icon.svg"
+        "image resources/home page/brand_bowel_sound_logo.png"
+        "image resources/home page/concept_diagram.png"
+        "image resources/home page/hero_intestine_waveform.png"
+        "image resources/home page/nav_about.svg"
+        "image resources/home page/nav_about_selected.svg"
+        "image resources/home page/nav_auxiliary_diagnosis.svg"
+        "image resources/home page/nav_auxiliary_diagnosis_selected.svg"
+        "image resources/home page/nav_home.svg"
+        "image resources/home page/nav_home_selected.svg"
+        "image resources/home page/nav_master_control.svg"
+        "image resources/home page/nav_master_control_selected.svg"
+        "image resources/home page/nav_medical_record_management.svg"
+        "image resources/home page/nav_medical_record_management_selected.svg"
+        "image resources/home page/nav_temporal_spectral_monitoring.svg"
+        "image resources/home page/nav_temporal_spectral_monitoring_selected.svg"
+        "image resources/home page/overview_abnormal_alert_icon.png"
+        "image resources/home page/overview_analyzed_records_icon.png"
+        "image resources/home page/overview_database_records_icon.png"
+        "image resources/home page/overview_today_collection_icon.png"
+        "image resources/home page/recent_signal_waveform_preview.png"
+        "image resources/home page/security_badge_banner.png"
+        "image resources/home page/status_acquisition_device_icon.png"
+        "image resources/home page/status_cpu_usage_icon.png"
+        "image resources/home page/status_memory_usage_icon.png"
+        "image resources/home page/status_storage_usage_icon.png"
 )
 
 qt_add_library(Component STATIC)

@@ -26,13 +26,14 @@ file(GLOB_RECURSE BACKEND_HEADERS CONFIGURE_DEPENDS
     ${CMAKE_CURRENT_SOURCE_DIR}/DataBase/*.hpp
 )
 
-set(RECOGNITION_SERVICE_MANAGER_HEADER
+set(BACKEND_MANUAL_MOC_HEADERS
     ${CMAKE_CURRENT_SOURCE_DIR}/Header_Files/RecognitionServiceManager.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/Header_Files/SystemStatusMonitor.h
 )
 
-# Work around intermittent AUTOMOC source collection misses for this QObject class.
-set_source_files_properties(${RECOGNITION_SERVICE_MANAGER_HEADER} PROPERTIES SKIP_AUTOMOC ON)
-qt_wrap_cpp(BACKEND_MANUAL_MOC_SOURCES ${RECOGNITION_SERVICE_MANAGER_HEADER})
+# Work around intermittent AUTOMOC source collection misses for these QObject classes.
+set_source_files_properties(${BACKEND_MANUAL_MOC_HEADERS} PROPERTIES SKIP_AUTOMOC ON)
+qt_wrap_cpp(BACKEND_MANUAL_MOC_SOURCES ${BACKEND_MANUAL_MOC_HEADERS})
 
 add_library(BackendCore STATIC
     ${BACKEND_SOURCES}

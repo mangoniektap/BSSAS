@@ -11,12 +11,12 @@ Item {
     property int currentIndex: left_toolbar.display_content_selection
     property string pageLoadError: ""
     readonly property var pageSources: [
-        "./display_content/Home_Page.qml",
+        "./display_content/Home.qml",
         "./display_content/Software_Master_Control.qml",
         "./display_content/Temporal_Spectral_Monitoring.qml",
         "./display_content/Medical_Record_Management.qml",
         "./display_content/Auxiliary_Diagnosis.qml",
-        "./display_content/About_Page.qml"
+        "./display_content/About.qml"
     ]
 
     Item {

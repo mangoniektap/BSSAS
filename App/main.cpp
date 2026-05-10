@@ -19,6 +19,7 @@
 #include "RecognitionServiceManager.h"
 #include "SignalDFTCalculation.h"
 #include "SignalPreprocessing.h"
+#include "SystemStatusMonitor.h"
 #include "UpdateManager.h"
 #include "WAVHandle.h"
 
@@ -41,6 +42,7 @@ int main(int argc, char *argv[])
     RecognitionServiceManager recognitionServiceManager(&app);
     UpdateManager updateManager(&app);
     DebugTerminalManager debugTerminalManager(&app);
+    SystemStatusMonitor systemStatusMonitor(&app);
 
     QQmlApplicationEngine engine;
 
@@ -65,6 +67,7 @@ int main(int argc, char *argv[])
         &recognitionServiceManager);
     engine.rootContext()->setContextProperty("updateManager", &updateManager);
     engine.rootContext()->setContextProperty("debugTerminalManager", &debugTerminalManager);
+    engine.rootContext()->setContextProperty("systemStatusMonitor", &systemStatusMonitor);
 
     QObject::connect(
         &app,

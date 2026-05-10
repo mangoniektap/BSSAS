@@ -5,6 +5,7 @@
 #include <QSqlDatabase>
 #include <QStringList>
 #include <QVariantList>
+#include <QVariantMap>
 
 class DatabaseManager : public QObject
 {
@@ -28,6 +29,7 @@ public:
     Q_INVOKABLE bool initializeSearchDatabase();
     Q_INVOKABLE bool rebuildFileIndex();
     Q_INVOKABLE QVariantList searchFiles(const QString& keyword);
+    Q_INVOKABLE QVariantMap homeOverviewStats();
     Q_INVOKABLE bool openFile(const QString& filePath);
     Q_INVOKABLE QString databaseFilePath() const;
     Q_INVOKABLE QStringList indexedRoots() const;

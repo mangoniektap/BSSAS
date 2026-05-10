@@ -25,7 +25,7 @@ Item {
             rightMargin: 40
         }
         color: Theme.contentBg
-        radius: Theme.radiusXLarge
+        radius:50
         border.width: 1
         border.color: Theme.border
     }

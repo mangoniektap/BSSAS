@@ -1,321 +1,258 @@
-pragma ComponentBehavior: Bound
-
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Effects
 import BSSAS
+import MangoComponent
 
 Item {
     id: root
     signal settingClicked()
 
-    property int display_content_selection: navColumn.currentIndex
-    readonly property string iconSource: "images/home/home_sidebar_nav_icons.png"
-    readonly property string logoSource: "images/home/home_bowel_sound_logo.png"
-    readonly property string securityIconSource: "images/home/home_security_badge_icon.png"
-    readonly property var navItems: [
-        { title: "首页", selectedClip: [130, 262, 138, 130], normalClip: [130, 546, 138, 132] },
-        { title: "软件总控", selectedClip: [382, 266, 138, 130], normalClip: [382, 552, 138, 132] },
-        { title: "时频监测", selectedClip: [636, 270, 138, 124], normalClip: [636, 554, 138, 126] },
-        { title: "病历管理", selectedClip: [888, 260, 132, 142], normalClip: [888, 548, 132, 142] },
-        { title: "辅助诊断", selectedClip: [1104, 274, 140, 122], normalClip: [1104, 556, 140, 124] },
-        { title: "关于", selectedClip: [1330, 260, 138, 140], normalClip: [1330, 548, 138, 140] }
-    ]
+    property alias display_content_selection: sidebar.currentIndex
+    property int navFrameTopSpacing: 20
 
-    width: Math.max(244, Math.min(300, mainwindow_background.display_area.x - 40))
+    width: Math.floor(parent.width * 0.225) - 80
 
     anchors {
         top: parent.top
         bottom: parent.bottom
         left: parent.left
-        leftMargin: 18
-        topMargin: 22
-        bottomMargin: 22
+        margins: 20
     }
 
-    component SpriteIcon : Item {
-        id: spriteIcon
-        property string source
-        property var clipRect
+    Item {
+        anchors.fill: parent
+
+        Item {
+            id: brandHeader
+            height: 130
+            anchors {
+                top: parent.top
+                left: parent.left
+                right: parent.right
+                leftMargin: 10
+            }
+
+            RowLayout {
+                anchors {
+                    left: parent.left
+                    right: parent.right
+                    verticalCenter: parent.verticalCenter
+                }
+                spacing: 12
+
+                Image {
+                    id: brandLogo
+                    Layout.preferredWidth: 90
+                    Layout.preferredHeight: 90
+                    source: "qrc:/qt/qml/BSSASContent/image resources/home page/brand_bowel_sound_logo.png"
+                    sourceClipRect: Qt.rect(390, 96, 820, 820)
+                    fillMode: Image.PreserveAspectFit
+                    smooth: true
+                    mipmap: true
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: "肠鸣音信号分析系统"
+                        color: Theme.primary
+                        elide: Text.ElideRight
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontHeroSubtitle
+                        font.weight: Font.DemiBold
+                        renderType: Text.NativeRendering
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: "医学诊断辅助工具"
+                        color: Theme.textSecondary
+                        elide: Text.ElideRight
+                        font.family: Theme.fontHeroSubtitle
+                        font.pixelSize: Theme.fontCardTitle
+                        font.weight: Font.Normal
+                        renderType: Text.NativeRendering
+                    }
+                }
+            }
+        }
+
+        Item {
+            id: navFrameContainer
+            height: parent.height * 0.5
+            anchors {
+                top: brandHeader.bottom
+                topMargin: 40
+                left: parent.left
+                right: parent.right
+            }
+
+            Rectangle {
+                id: navFrame
+                anchors.fill: parent
+                radius: Theme.radiusXLarge
+                color: Theme.cardBg
+                border.width: 1
+                border.color: Theme.borderLight
+
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: 1
+                    radius: Math.max(0, parent.radius - 1)
+                    color: "transparent"
+                    border.width: 1
+                    border.color: Theme.border
+                }
+            }
+
+            ColumnTabBar {
+                id: sidebar
+                anchors {
+                    fill: parent
+                    margins: 12
+                }
+                spacing: 10
+                currentIndex: 3
+
+                background: Rectangle { color: "transparent" }
+
+                Repeater {
+                    model: [
+                        {
+                            "title": "首页",
+                            "icon": "qrc:/qt/qml/BSSASContent/image resources/home page/nav_home.svg",
+                            "selectedIcon": "qrc:/qt/qml/BSSASContent/image resources/home page/nav_home_selected.svg"
+                        },
+                        {
+                            "title": "软件总控",
+                            "icon": "qrc:/qt/qml/BSSASContent/image resources/home page/nav_master_control.svg",
+                            "selectedIcon": "qrc:/qt/qml/BSSASContent/image resources/home page/nav_master_control_selected.svg"
+                        },
+                        {
+                            "title": "时频监测",
+                            "icon": "qrc:/qt/qml/BSSASContent/image resources/home page/nav_temporal_spectral_monitoring.svg",
+                            "selectedIcon": "qrc:/qt/qml/BSSASContent/image resources/home page/nav_temporal_spectral_monitoring_selected.svg"
+                        },
+                        {
+                            "title": "病历管理",
+                            "icon": "qrc:/qt/qml/BSSASContent/image resources/home page/nav_medical_record_management.svg",
+                            "selectedIcon": "qrc:/qt/qml/BSSASContent/image resources/home page/nav_medical_record_management_selected.svg"
+                        },
+                        {
+                            "title": "辅助诊断",
+                            "icon": "qrc:/qt/qml/BSSASContent/image resources/home page/nav_auxiliary_diagnosis.svg",
+                            "selectedIcon": "qrc:/qt/qml/BSSASContent/image resources/home page/nav_auxiliary_diagnosis_selected.svg"
+                        },
+                        {
+                            "title": "关于",
+                            "icon": "qrc:/qt/qml/BSSASContent/image resources/home page/nav_about.svg",
+                            "selectedIcon": "qrc:/qt/qml/BSSASContent/image resources/home page/nav_about_selected.svg"
+                        }
+                    ]
+
+                    TabButton {
+                        id: control
+                        required property var modelData
+
+                        text: control.modelData.title
+                        font.family: Theme.fontFamily; font.pixelSize: Theme.fontPageTitle; font.weight: Font.Medium
+                        implicitHeight: (sidebar.height - sidebar.spacing * 5) / 6
+                        width: sidebar.width
+
+                        contentItem: Item {
+                            RowLayout {
+                                anchors {
+                                    fill: parent
+                                    leftMargin: Math.max(18, control.width * 0.12)
+                                    rightMargin: 16
+                                }
+                                spacing: 14
+
+                                Image {
+                                    readonly property real navIconSize: Math.max(24, Math.min(32, control.height * 0.34))
+                                    Layout.preferredWidth: navIconSize
+                                    Layout.preferredHeight: navIconSize
+                                    source: control.checked ? control.modelData.selectedIcon : control.modelData.icon
+                                    sourceSize.width: width
+                                    sourceSize.height: height
+                                    fillMode: Image.PreserveAspectFit
+                                    smooth: true
+                                    mipmap: true
+                                }
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: control.text
+                                    font: control.font
+                                    color: control.checked ? Theme.textPrimary : Theme.textWeak
+                                    horizontalAlignment: Text.AlignLeft
+                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
+                                    renderType: Text.NativeRendering
+
+                                    Behavior on color {
+                                        ColorAnimation { duration: 200 }
+                                    }
+                                }
+                            }
+                        }
+
+                        background: Rectangle {
+                            radius: 12
+                            color: {
+                                if (control.pressed) return Theme.secondaryPressedBg
+                                if (control.checked) return Theme.primaryLight
+                                if (control.hovered) return Theme.primaryLighter
+                                return "transparent"
+                            }
+
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: 250
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.leftMargin: 7
+                                anchors.verticalCenter: parent.verticalCenter
+                                height: parent.height * 0.5
+                                width: 3
+                                radius: 1.5
+                                color: Theme.primary
+                                scale: control.checked ? 1 : 0
+
+                                Behavior on scale {
+                                    NumberAnimation {
+                                        duration: 400
+                                        easing.type: Easing.OutBack
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         Image {
-            id: spriteImage
-            anchors.fill: parent
-            source: spriteIcon.source
-            sourceClipRect: Qt.rect(spriteIcon.clipRect[0],
-                                    spriteIcon.clipRect[1],
-                                    spriteIcon.clipRect[2],
-                                    spriteIcon.clipRect[3])
+            id: securityBadgeIcon
+            width: parent.width * 1.5
+            height: width * 0.375
+            anchors {
+                horizontalCenter: parent.horizontalCenter
+                bottom: parent.bottom
+                bottomMargin: 120
+            }
+            source: "qrc:/qt/qml/BSSASContent/image resources/home page/security_badge_banner.png"
             fillMode: Image.PreserveAspectFit
             smooth: true
             mipmap: true
-        }
-    }
-
-    component NavButton : Item {
-        id: navButton
-        property string title
-        property bool selected: false
-        property var selectedClip
-        property var normalClip
-        signal clicked()
-
-        implicitHeight: 58
-
-        HoverHandler {
-            id: hoverHandler
-            target: navButton
-        }
-
-        TapHandler {
-            id: tapHandler
-            onTapped: navButton.clicked()
-        }
-
-        Rectangle {
-            id: navBackground
-            anchors.fill: parent
-            radius: 12
-            color: {
-                if (tapHandler.pressed) return Theme.secondaryPressedBg
-                if (navButton.selected) return Theme.primaryLight
-                if (hoverHandler.hovered) return Theme.primaryLighter
-                return "transparent"
-            }
-            border.width: navButton.selected ? 1 : 0
-            border.color: Theme.primaryBorder
-
-            Behavior on color {
-                ColorAnimation { duration: 180; easing.type: Easing.OutCubic }
-            }
-        }
-
-        Rectangle {
-            anchors {
-                left: parent.left
-                verticalCenter: parent.verticalCenter
-            }
-            width: 4
-            height: 34
-            radius: 2
-            color: Theme.primary
-            opacity: navButton.selected ? 1.0 : 0.0
-            scale: navButton.selected ? 1.0 : 0.25
-            transformOrigin: Item.Center
-
-            Behavior on opacity { NumberAnimation { duration: 160 } }
-            Behavior on scale {
-                NumberAnimation { duration: 220; easing.type: Easing.OutBack }
-            }
-        }
-
-        SpriteIcon {
-            id: navIcon
-            width: 25
-            height: 25
-            anchors {
-                left: parent.left
-                leftMargin: 28
-                verticalCenter: parent.verticalCenter
-            }
-            source: root.iconSource
-            clipRect: navButton.selected ? navButton.selectedClip : navButton.normalClip
-            opacity: navButton.selected ? 1.0 : 0.82
-            scale: navButton.selected ? 1.0 : 0.96
-
-            Behavior on opacity { NumberAnimation { duration: 180 } }
-            Behavior on scale { NumberAnimation { duration: 180 } }
-        }
-
-        Text {
-            anchors {
-                left: navIcon.right
-                leftMargin: 18
-                right: parent.right
-                rightMargin: 14
-                verticalCenter: parent.verticalCenter
-            }
-            text: navButton.title
-            color: navButton.selected ? Theme.primary : Theme.textSidebar
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontBodyLarge
-            font.weight: navButton.selected ? Font.DemiBold : Font.Medium
-            elide: Text.ElideRight
-            renderType: Text.NativeRendering
-
-            Behavior on color { ColorAnimation { duration: 180 } }
-        }
-    }
-
-    Rectangle {
-        id: panel
-        anchors.fill: parent
-        radius: 24
-        color: Theme.contentBg
-        border.width: 1
-        border.color: Theme.borderLight
-    }
-
-    MultiEffect {
-        anchors.fill: panel
-        source: panel
-        shadowEnabled: true
-        shadowColor: Theme.shadowCard
-        shadowBlur: 0.28
-        shadowVerticalOffset: 4
-        z: -1
-    }
-
-    ColumnLayout {
-        anchors {
-            fill: parent
-            leftMargin: 18
-            rightMargin: 18
-            topMargin: 24
-            bottomMargin: 26
-        }
-        spacing: 22
-
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.leftMargin: 2
-            Layout.rightMargin: 2
-            spacing: 12
-
-            SpriteIcon {
-                Layout.preferredWidth: 50
-                Layout.preferredHeight: 50
-                source: root.logoSource
-                clipRect: [452, 128, 680, 704]
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 3
-
-                Text {
-                    Layout.fillWidth: true
-                    text: "肠鸣音信号分析系统"
-                    color: Theme.textTitle
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontBodyLarge
-                    font.weight: Font.Bold
-                    elide: Text.ElideRight
-                    renderType: Text.NativeRendering
-                }
-
-                Text {
-                    Layout.fillWidth: true
-                    text: "医学诊断辅助工具"
-                    color: Theme.textMuted
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSmall
-                    font.weight: Font.Normal
-                    elide: Text.ElideRight
-                    renderType: Text.NativeRendering
-                }
-            }
-        }
-
-        Item {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 1
-        }
-
-        ColumnLayout {
-            id: navColumn
-            property int currentIndex: 0
-
-            Layout.fillWidth: true
-            spacing: 10
-
-            Repeater {
-                model: root.navItems
-
-                NavButton {
-                    Layout.fillWidth: true
-                    title: modelData.title
-                    selected: navColumn.currentIndex === index
-                    selectedClip: modelData.selectedClip
-                    normalClip: modelData.normalClip
-                    onClicked: navColumn.currentIndex = index
-                }
-            }
-        }
-
-        Item {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 78
-            radius: 12
-            color: Theme.primaryLighter
-            border.width: 1
-            border.color: Theme.border
-
-            SpriteIcon {
-                id: securityIcon
-                width: 28
-                height: 28
-                anchors {
-                    left: parent.left
-                    leftMargin: 16
-                    verticalCenter: parent.verticalCenter
-                }
-                source: root.securityIconSource
-                clipRect: [530, 184, 526, 622]
-            }
-
-            Column {
-                anchors {
-                    left: securityIcon.right
-                    leftMargin: 12
-                    right: arrow.left
-                    rightMargin: 8
-                    verticalCenter: parent.verticalCenter
-                }
-                spacing: 4
-
-                Text {
-                    width: parent.width
-                    text: "数据安全 · 合规可信"
-                    color: Theme.primary
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSmall
-                    font.weight: Font.DemiBold
-                    elide: Text.ElideRight
-                    renderType: Text.NativeRendering
-                }
-
-                Text {
-                    width: parent.width
-                    text: "本地处理 · 隐私保护"
-                    color: Theme.textMuted
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontTiny
-                    font.weight: Font.Normal
-                    elide: Text.ElideRight
-                    renderType: Text.NativeRendering
-                }
-            }
-
-            Text {
-                id: arrow
-                anchors {
-                    right: parent.right
-                    rightMargin: 14
-                    verticalCenter: parent.verticalCenter
-                }
-                text: "›"
-                color: Theme.primary
-                font.family: Theme.fontFamily
-                font.pixelSize: 28
-                font.weight: Font.Light
-                renderType: Text.NativeRendering
-            }
         }
     }
 }

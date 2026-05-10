@@ -1,10 +1,14 @@
 #include "DatabaseManager.h"
 #include "DatabaseStoragePaths.h"
 
+#include <algorithm>
+#include <QDate>
+#include <QDateTime>
 #include <QDebug>
 #include <QDesktopServices>
 #include <QDir>
 #include <QDirIterator>
+#include <QFile>
 #include <QFileInfo>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -16,6 +20,88 @@ const QString kConnectionName = QStringLiteral("BSSASFileSearchConnection");
 const QString kAudioCategory = QStringLiteral("Intestinal_sound_samples");
 const QString kReportCategory =
     QStringLiteral("Identification_and_Feature_Extraction_Reports");
+constexpr qint64 kMaxReportScanBytes = 4 * 1024 * 1024;
+
+struct DirectoryStats
+{
+    int total = 0;
+    int today = 0;
+    int yesterday = 0;
+    int abnormal = 0;
+    int abnormalToday = 0;
+    int abnormalYesterday = 0;
+};
+
+bool isFileOnDate(const QFileInfo& fileInfo, const QDate& date)
+{
+    return fileInfo.lastModified().date() == date;
+}
+
+bool containsAnyAbnormalMarker(const QString& text)
+{
+    return text.contains(QStringLiteral("abnormal")) ||
+           text.contains(QStringLiteral("异常")) ||
+           text.contains(QStringLiteral("高风险"));
+}
+
+bool reportLooksAbnormal(const QFileInfo& fileInfo)
+{
+    if (containsAnyAbnormalMarker(fileInfo.fileName().toLower())) {
+        return true;
+    }
+
+    QFile file(fileInfo.absoluteFilePath());
+    if (!file.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+
+    const QByteArray bytes = file.read(std::min(fileInfo.size(), kMaxReportScanBytes));
+    return containsAnyAbnormalMarker(QString::fromUtf8(bytes).toLower()) ||
+           containsAnyAbnormalMarker(QString::fromLatin1(bytes).toLower());
+}
+
+DirectoryStats collectDirectoryStats(const QString& directoryPath, bool scanAbnormalReports)
+{
+    DirectoryStats stats;
+    const QDir directory(directoryPath);
+    if (!directory.exists()) {
+        return stats;
+    }
+
+    const QDate today = QDate::currentDate();
+    const QDate yesterday = today.addDays(-1);
+
+    QDirIterator iterator(
+        directoryPath,
+        QDir::Files | QDir::NoDotAndDotDot,
+        QDirIterator::Subdirectories);
+    while (iterator.hasNext()) {
+        iterator.next();
+        const QFileInfo fileInfo = iterator.fileInfo();
+        const bool modifiedToday = isFileOnDate(fileInfo, today);
+        const bool modifiedYesterday = isFileOnDate(fileInfo, yesterday);
+
+        ++stats.total;
+        if (modifiedToday) {
+            ++stats.today;
+        }
+        if (modifiedYesterday) {
+            ++stats.yesterday;
+        }
+
+        if (scanAbnormalReports && reportLooksAbnormal(fileInfo)) {
+            ++stats.abnormal;
+            if (modifiedToday) {
+                ++stats.abnormalToday;
+            }
+            if (modifiedYesterday) {
+                ++stats.abnormalYesterday;
+            }
+        }
+    }
+
+    return stats;
+}
 }
 
 DatabaseManager::DatabaseManager(QObject* parent)
@@ -309,6 +395,46 @@ QVariantList DatabaseManager::searchFiles(const QString& keyword)
 
     setLastError(QString());
     return results;
+}
+
+QVariantMap DatabaseManager::homeOverviewStats()
+{
+    if (!ensureManagedDirectoriesExist()) {
+        return {};
+    }
+
+    const DirectoryStats audioStats =
+        collectDirectoryStats(DatabaseStoragePaths::AUDIO_PATH, false);
+    const DirectoryStats reportStats =
+        collectDirectoryStats(DatabaseStoragePaths::REPORTS_PATH, true);
+
+    QVariantMap stats;
+    stats.insert(QStringLiteral("todayCollected"), audioStats.today);
+    stats.insert(QStringLiteral("todayCollectedYesterday"), audioStats.yesterday);
+    stats.insert(QStringLiteral("collectedTotal"), audioStats.total);
+    stats.insert(QStringLiteral("analyzed"), reportStats.total);
+    stats.insert(QStringLiteral("analyzedToday"), reportStats.today);
+    stats.insert(QStringLiteral("analyzedYesterday"), reportStats.yesterday);
+    stats.insert(QStringLiteral("abnormal"), reportStats.abnormal);
+    stats.insert(QStringLiteral("abnormalToday"), reportStats.abnormalToday);
+    stats.insert(QStringLiteral("abnormalYesterday"), reportStats.abnormalYesterday);
+    stats.insert(QStringLiteral("databaseRecords"), audioStats.total + reportStats.total);
+    stats.insert(QStringLiteral("databaseToday"), audioStats.today + reportStats.today);
+    stats.insert(QStringLiteral("databaseYesterday"), audioStats.yesterday + reportStats.yesterday);
+    stats.insert(
+        QStringLiteral("databaseRoot"),
+        QDir::toNativeSeparators(DatabaseStoragePaths::ROOT_PATH));
+    stats.insert(
+        QStringLiteral("audioRoot"),
+        QDir::toNativeSeparators(DatabaseStoragePaths::AUDIO_PATH));
+    stats.insert(
+        QStringLiteral("reportRoot"),
+        QDir::toNativeSeparators(DatabaseStoragePaths::REPORTS_PATH));
+    stats.insert(
+        QStringLiteral("updatedAt"),
+        QDateTime::currentDateTime().toString(Qt::ISODate));
+
+    return stats;
 }
 
 bool DatabaseManager::openFile(const QString& filePath)
