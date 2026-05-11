@@ -1,5 +1,6 @@
-﻿import QtQuick
+import QtQuick
 import BSSAS
+
 Item {
     id: window_display_master_control
     x: mainwindow_background.display_area.x
@@ -9,7 +10,6 @@ Item {
     clip: true
 
     property int currentIndex: left_toolbar.display_content_selection
-    property string pageLoadError: ""
     readonly property var pageSources: [
         "./display_content/Home.qml",
         "./display_content/Software_Master_Control.qml",
@@ -19,6 +19,13 @@ Item {
         "./display_content/About.qml"
     ]
 
+    function animateCurrentPage() {
+        enterAnim.stop()
+        pageContainer.opacity = 0
+        pageContainer.y = 50
+        enterAnim.start()
+    }
+
     Item {
         id: pageContainer
         x: 0
@@ -27,52 +34,100 @@ Item {
         height: parent.height
         opacity: 1
 
-        Loader {
-            id: pageLoader
-            anchors.fill: parent
-            source: (
-                window_display_master_control.currentIndex >= 0
-                && window_display_master_control.currentIndex < window_display_master_control.pageSources.length
-            ) ? window_display_master_control.pageSources[window_display_master_control.currentIndex] : ""
+        Repeater {
+            id: pageCacheRepeater
+            model: window_display_master_control.pageSources
 
-            onSourceChanged: {
-                window_display_master_control.pageLoadError = ""
-            }
+            delegate: Item {
+                id: pageSlot
+                anchors.fill: parent
+                visible: isCurrent
+                z: isCurrent ? 1 : 0
 
-            onStatusChanged: {
-                if (status === Loader.Error) {
-                    window_display_master_control.pageLoadError = "Failed to load page source: " + source
-                    console.error(window_display_master_control.pageLoadError)
+                property bool isCurrent: index === window_display_master_control.currentIndex
+                property bool keepAlive: isCurrent
+                property string loadError: ""
+
+                function syncPageActive() {
+                    if (pageLoader.item) {
+                        pageLoader.item.pageActive = pageSlot.isCurrent
+                    }
                 }
-            }
 
-            onLoaded: {
-                if (!item)
-                    return
+                onIsCurrentChanged: {
+                    if (isCurrent) {
+                        cacheReleaseTimer.stop()
+                        keepAlive = true
+                        if (pageLoader.item) {
+                            syncPageActive()
+                            window_display_master_control.animateCurrentPage()
+                        }
+                    } else {
+                        syncPageActive()
+                        if (keepAlive) {
+                            cacheReleaseTimer.restart()
+                        }
+                    }
+                }
 
-                enterAnim.stop()
-                pageContainer.opacity = 0
-                pageContainer.y = 50
-                enterAnim.start()
-            }
-        }
+                Loader {
+                    id: pageLoader
+                    anchors.fill: parent
+                    active: pageSlot.keepAlive
+                    source: modelData
+                    visible: status === Loader.Ready
 
-        Rectangle {
-            anchors.fill: parent
-            visible: pageLoader.status === Loader.Error
-            color: Theme.dangerBg
-            border.width: 1
-            border.color: Theme.dangerBorder
+                    onLoaded: {
+                        pageSlot.loadError = ""
+                        pageSlot.syncPageActive()
+                        if (pageSlot.isCurrent) {
+                            window_display_master_control.animateCurrentPage()
+                        }
+                    }
 
-            Text {
-                anchors.centerIn: parent
-                width: parent.width - 40
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.Wrap
-                text: window_display_master_control.pageLoadError.length > 0
-                    ? window_display_master_control.pageLoadError
-                    : "Failed to load page"
-                color: Theme.dangerText
+                    onStatusChanged: {
+                        if (status === Loader.Error) {
+                            pageSlot.loadError = "Failed to load page source: " + source
+                            console.error(pageSlot.loadError)
+                            if (pageSlot.isCurrent) {
+                                window_display_master_control.animateCurrentPage()
+                            }
+                        }
+                    }
+                }
+
+                Timer {
+                    id: cacheReleaseTimer
+                    interval: Math.max(1, Constants.pageCacheRetentionMs)
+                    repeat: false
+
+                    onTriggered: {
+                        if (!pageSlot.isCurrent) {
+                            pageSlot.syncPageActive()
+                            pageSlot.keepAlive = false
+                            pageSlot.loadError = ""
+                        }
+                    }
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    visible: pageSlot.isCurrent && pageLoader.status === Loader.Error
+                    color: Theme.dangerBg
+                    border.width: 1
+                    border.color: Theme.dangerBorder
+
+                    Text {
+                        anchors.centerIn: parent
+                        width: parent.width - 40
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
+                        text: pageSlot.loadError.length > 0
+                            ? pageSlot.loadError
+                            : "Failed to load page"
+                        color: Theme.dangerText
+                    }
+                }
             }
         }
     }

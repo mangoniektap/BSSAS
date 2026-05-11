@@ -1,12 +1,15 @@
 /**
  * @file TransientNoiseSuppressor.cpp
- * @brief 瞬态噪声抑制算法实现，含峭度因子检测、肠鸣音保护和 OLA 合成。
+ * @brief Offline transient noise suppression implementation with crest-factor detection,
+ *        low-frequency bowel-sound protection, and OLA synthesis.
  */
 #include "TransientNoiseSuppressor.h"
+
 #include <QDebug>
+
+#include <algorithm>
 #include <atomic>
 #include <cmath>
-#include <limits>
 
 namespace {
 constexpr double kPi = 3.14159265358979323846;
@@ -15,209 +18,239 @@ constexpr double kNormalizationEpsilon = 1e-8;
 
 std::atomic_bool g_debugLoggingEnabled = true;
 
-/** @brief 构造 sqrt-Hann 分析/合成窗。 */
+/** @brief Build a sqrt-Hann window for matched analysis and synthesis. */
 QVector<double> buildSqrtHannWindow(int frameLength)
 {
-    QVector<double> w(frameLength, 1.0);
-    if (frameLength <= 1) return w;
-    for (int i = 0; i < frameLength; ++i) {
-        double phase = (2.0 * kPi * i) / (frameLength - 1);
-        double hann = 0.5 * (1.0 - std::cos(phase));
-        w[i] = std::sqrt(std::max(hann, 0.0));
+    QVector<double> window(frameLength, 1.0);
+    if (frameLength <= 1) {
+        return window;
     }
-    return w;
+
+    for (int i = 0; i < frameLength; ++i) {
+        const double phase = (2.0 * kPi * i) / (frameLength - 1);
+        const double hann = 0.5 * (1.0 - std::cos(phase));
+        window[i] = std::sqrt(std::max(hann, 0.0));
+    }
+    return window;
 }
 
-/** @brief 计算信号均方根值。 */
+/** @brief Compute signal RMS while treating non-finite values as silence. */
 double computeRms(const QVector<float>& samples)
 {
-    if (samples.isEmpty()) return 0.0;
+    if (samples.isEmpty()) {
+        return 0.0;
+    }
+
     double sum = 0.0;
-    for (float s : samples) {
-        double v = std::isfinite(s) ? static_cast<double>(s) : 0.0;
-        sum += v * v;
+    for (float sample : samples) {
+        const double value = std::isfinite(sample) ? static_cast<double>(sample) : 0.0;
+        sum += value * value;
     }
     return std::sqrt(sum / samples.size());
 }
 
-/** @brief 计算峭度因子（峰值/RMS），用于检测瞬态事件。 */
+/** @brief Compute crest factor, peak divided by RMS, for transient detection. */
 double computeCrestFactor(const QVector<float>& samples)
 {
-    double rms = computeRms(samples);
-    if (rms <= kMinimumPower) return 0.0;
+    const double rms = computeRms(samples);
+    if (rms <= kMinimumPower) {
+        return 0.0;
+    }
+
     double peak = 0.0;
-    for (float s : samples)
-        peak = std::max(peak, std::abs(static_cast<double>(s)));
+    for (float sample : samples) {
+        peak = std::max(peak, std::abs(static_cast<double>(sample)));
+    }
     return peak / rms;
 }
 
-/** @brief 计算过零率，辅助区分噪声与生物信号。 */
+/** @brief Compute zero-crossing count retained for future transient classifiers. */
 int computeZeroCrossingRate(const QVector<float>& samples)
 {
-    if (samples.size() < 2) return 0;
+    if (samples.size() < 2) {
+        return 0;
+    }
+
     int crossings = 0;
     for (int i = 1; i < samples.size(); ++i) {
-        double a = static_cast<double>(samples[i-1]);
-        double b = static_cast<double>(samples[i]);
-        if (std::isfinite(a) && std::isfinite(b) && a * b < 0.0)
+        const double previous = static_cast<double>(samples[i - 1]);
+        const double current = static_cast<double>(samples[i]);
+        if (std::isfinite(previous) && std::isfinite(current) && previous * current < 0.0) {
             ++crossings;
+        }
     }
     return crossings;
 }
 
-/** @brief 计算低频能量占比，使用一阶 IIR 低通近似。 */
-double lowFreqEnergyFraction(const QVector<float>& samples, int sampleRate,
-                             double upperHz)
+/** @brief Estimate low-frequency energy fraction with a first-order IIR lowpass approximation. */
+double lowFreqEnergyFraction(const QVector<float>& samples, int sampleRate, double upperHz)
 {
-    if (samples.size() < 4) return 0.5;
-    double a = 1.0 - std::exp(-2.0 * kPi * upperHz / sampleRate);
-    double y = 0.0;
-    double lowE = 0.0, totalE = 0.0;
-    for (int i = 0; i < samples.size(); ++i) {
-        double x = static_cast<double>(samples[i]);
-        totalE += x * x;
-        y += a * (x - y);
-        lowE += y * y;
+    if (samples.size() < 4) {
+        return 0.5;
     }
-    return totalE > kMinimumPower ? lowE / totalE : 0.0;
+
+    const double alpha = 1.0 - std::exp(-2.0 * kPi * upperHz / sampleRate);
+    double lowpass = 0.0;
+    double lowEnergy = 0.0;
+    double totalEnergy = 0.0;
+    for (float sample : samples) {
+        const double value = static_cast<double>(sample);
+        totalEnergy += value * value;
+        lowpass += alpha * (value - lowpass);
+        lowEnergy += lowpass * lowpass;
+    }
+    return totalEnergy > kMinimumPower ? lowEnergy / totalEnergy : 0.0;
 }
 
 /**
- * @brief 对单个分析帧进行瞬态检测与衰减。
- * @param isBurst 输出参数，标记当前帧是否被判定为瞬态。
+ * @brief Detect and attenuate one analysis frame.
+ * @param frame Windowed analysis frame.
+ * @param sampleRate Sampling rate in Hz.
+ * @param params Algorithm parameters.
+ * @param localMeanEnergy Recent local mean frame energy.
+ * @param consecutiveBurstFrames Number of consecutive frames already classified as bursts.
+ * @param isBurst Outputs whether this frame was attenuated as a transient burst.
+ * @returns Suppressed frame samples.
  */
-QVector<float> suppressFrame(const QVector<float>& frame, int sampleRate,
-                             const TransientNoiseSuppressor::Parameters& params,
-                             double localMeanEnergy, int consecutiveBurstFrames,
-                             bool &isBurst)
+QVector<float> suppressFrame(
+    const QVector<float>& frame,
+    int sampleRate,
+    const TransientNoiseSuppressor::Parameters& params,
+    double localMeanEnergy,
+    int consecutiveBurstFrames,
+    bool& isBurst)
 {
     isBurst = false;
-    const int N = frame.size();
-    QVector<float> out(N);
+    const int frameSize = frame.size();
+    QVector<float> output(frameSize);
 
-    double crest = computeCrestFactor(frame);
-    double rms = computeRms(frame);
-    double energy = rms * rms * N;
-    int zcr = computeZeroCrossingRate(frame);
+    const double crest = computeCrestFactor(frame);
+    const double rms = computeRms(frame);
+    const double energy = rms * rms * frameSize;
+    const int zeroCrossings = computeZeroCrossingRate(frame);
+    (void)zeroCrossings;
 
-    bool candidate = (crest > params.transientThreshold) &&
-                     (energy > localMeanEnergy * params.minEnergyRatio) &&
-                     (energy < localMeanEnergy * params.maxEnergyRatio);
+    const bool candidate =
+        (crest > params.transientThreshold) &&
+        (energy > localMeanEnergy * params.minEnergyRatio) &&
+        (energy < localMeanEnergy * params.maxEnergyRatio);
 
     if (!candidate) {
-        out = frame;
-        return out;
+        return frame;
     }
 
-    if (consecutiveBurstFrames * (params.frameLength / static_cast<double>(sampleRate) * 1000.0)
-        > params.maxDurationMs) {
-        out = frame;
-        return out;
+    const double consecutiveDurationMs =
+        consecutiveBurstFrames * (params.frameLength / static_cast<double>(sampleRate) * 1000.0);
+    if (consecutiveDurationMs > params.maxDurationMs) {
+        return frame;
     }
 
-    double lowFrac = lowFreqEnergyFraction(frame, sampleRate, params.lowFreqUpperHz);
+    const double lowFraction = lowFreqEnergyFraction(frame, sampleRate, params.lowFreqUpperHz);
     double effectiveAttenuation = params.attenuationGain;
-    if (lowFrac > params.bowelProtectFraction) {
+    if (lowFraction > params.bowelProtectFraction) {
         effectiveAttenuation = 0.5 * (1.0 + params.attenuationGain);
     }
 
     isBurst = true;
-    for (int i = 0; i < N; ++i) {
-        out[i] = frame[i] * effectiveAttenuation;
+    for (int i = 0; i < frameSize; ++i) {
+        output[i] = static_cast<float>(frame[i] * effectiveAttenuation);
     }
-
-    return out;
-}
-
-/** @brief 初始化或重新配置流式处理状态。 */
-void initializeStreamingState(TransientNoiseSuppressor::StreamingState& state,
-                              int sampleRate,
-                              const TransientNoiseSuppressor::Parameters& params)
-{
-    state.sampleRate = sampleRate;
-    state.parameters = params;
-    state.hopLength = params.hopLength;
-    state.overlapLength = std::max(0, params.frameLength - params.hopLength);
-    state.window = buildSqrtHannWindow(params.frameLength);
-    state.analysisBuffer.clear();
-    state.synthesisOverlap.fill(0.0, state.overlapLength);
-    state.normalizationOverlap.fill(0.0, state.overlapLength);
-    state.analysisFrame.fill(0.0f, params.frameLength);
-    state.initialized = true;
+    return output;
 }
 } // namespace
 
 TransientNoiseSuppressor::Parameters
 TransientNoiseSuppressor::makeParameters(int sampleRate, int sampleCount)
 {
-    Parameters p;
-    p.frameLength = std::max(128, static_cast<int>(std::lround(sampleRate * 0.021)));
-    p.hopLength = p.frameLength / 2;
-    return p;
+    (void)sampleCount;
+
+    Parameters params;
+    params.frameLength = std::max(128, static_cast<int>(std::lround(sampleRate * 0.021)));
+    params.hopLength = params.frameLength / 2;
+    return params;
 }
 
 QVector<float> TransientNoiseSuppressor::suppress(const QVector<float>& input, int sampleRate)
 {
-    Parameters params = makeParameters(sampleRate, input.size());
+    const Parameters params = makeParameters(sampleRate, static_cast<int>(input.size()));
     return suppress(input, sampleRate, params);
 }
 
-QVector<float> TransientNoiseSuppressor::suppress(const QVector<float>& input, int sampleRate,
-                                                  const Parameters& params)
+QVector<float> TransientNoiseSuppressor::suppress(
+    const QVector<float>& input,
+    int sampleRate,
+    const Parameters& params)
 {
-    if (input.isEmpty()) return {};
-    if (params.frameLength <= 0 || params.hopLength <= 0) return input;
+    if (input.isEmpty()) {
+        return {};
+    }
+    if (params.frameLength <= 0 || params.hopLength <= 0) {
+        return input;
+    }
 
-    int leadPad = params.frameLength / 2;
-    int procLen = input.size() + leadPad * 2;
-    int frameCnt = std::max(1, 1 + (procLen - params.frameLength + params.hopLength - 1) / params.hopLength);
-    int paddedLen = (frameCnt - 1) * params.hopLength + params.frameLength;
+    const int inputSize = static_cast<int>(input.size());
+    const int leadPad = params.frameLength / 2;
+    const int procLen = inputSize + leadPad * 2;
+    const int frameCount =
+        std::max(1, 1 + (procLen - params.frameLength + params.hopLength - 1) / params.hopLength);
+    const int paddedLength = (frameCount - 1) * params.hopLength + params.frameLength;
 
-    QVector<double> padded(paddedLen, 0.0);
+    QVector<double> padded(paddedLength, 0.0);
     for (int i = 0; i < leadPad; ++i) {
-        int src = leadPad - i;
-        padded[i] = static_cast<double>(input[std::min(src, static_cast<int>(input.size()) - 1)]);
+        const int sourceIndex = leadPad - i;
+        padded[i] = static_cast<double>(input[std::min(sourceIndex, inputSize - 1)]);
     }
-    for (int i = 0; i < input.size(); ++i)
+    for (int i = 0; i < inputSize; ++i) {
         padded[leadPad + i] = static_cast<double>(input[i]);
-    for (int i = leadPad + input.size(); i < procLen; ++i) {
-        int dist = i - (leadPad + input.size()) + 1;
-        int src = input.size() - 1 - dist;
-        padded[i] = static_cast<double>(input[std::max(src, 0)]);
+    }
+    for (int i = leadPad + inputSize; i < procLen; ++i) {
+        const int distance = i - (leadPad + inputSize) + 1;
+        const int sourceIndex = inputSize - 1 - distance;
+        padded[i] = static_cast<double>(input[std::max(sourceIndex, 0)]);
     }
 
-    QVector<double> window = buildSqrtHannWindow(params.frameLength);
-    QVector<double> outAcc(paddedLen, 0.0);
-    QVector<double> normAcc(paddedLen, 0.0);
+    const QVector<double> window = buildSqrtHannWindow(params.frameLength);
+    QVector<double> outputAccumulator(paddedLength, 0.0);
+    QVector<double> normalizationAccumulator(paddedLength, 0.0);
     QVector<float> analysisFrame(params.frameLength, 0.0f);
 
-    const int energyBufferSize = 5;
+    constexpr int kEnergyBufferSize = 5;
     QVector<double> recentEnergy;
     int burstStreak = 0;
     int totalBurstFrames = 0;
 
-    for (int fi = 0; fi < frameCnt; ++fi) {
-        int fStart = fi * params.hopLength;
-        for (int i = 0; i < params.frameLength; ++i)
-            analysisFrame[i] = static_cast<float>(padded[fStart + i] * window[i]);
-
-        double frameEnergy = 0.0;
-        for (float s : analysisFrame) {
-            double v = static_cast<double>(s);
-            frameEnergy += v * v;
+    for (int frameIndex = 0; frameIndex < frameCount; ++frameIndex) {
+        const int frameStart = frameIndex * params.hopLength;
+        for (int i = 0; i < params.frameLength; ++i) {
+            analysisFrame[i] = static_cast<float>(padded[frameStart + i] * window[i]);
         }
 
-        if (recentEnergy.size() >= energyBufferSize)
+        double frameEnergy = 0.0;
+        for (float sample : analysisFrame) {
+            const double value = static_cast<double>(sample);
+            frameEnergy += value * value;
+        }
+
+        if (recentEnergy.size() >= kEnergyBufferSize) {
             recentEnergy.pop_front();
+        }
         recentEnergy.append(frameEnergy);
+
         double localMeanEnergy = 0.0;
-        for (double e : recentEnergy) localMeanEnergy += e;
+        for (double energy : recentEnergy) {
+            localMeanEnergy += energy;
+        }
         localMeanEnergy /= recentEnergy.size();
         localMeanEnergy = std::max(localMeanEnergy, params.rmsFloor * params.frameLength);
 
         bool isBurst = false;
-        QVector<float> suppressed = suppressFrame(analysisFrame, sampleRate, params,
-                                                  localMeanEnergy, burstStreak, isBurst);
+        const QVector<float> suppressed = suppressFrame(
+            analysisFrame,
+            sampleRate,
+            params,
+            localMeanEnergy,
+            burstStreak,
+            isBurst);
 
         if (isBurst) {
             ++burstStreak;
@@ -227,166 +260,49 @@ QVector<float> TransientNoiseSuppressor::suppress(const QVector<float>& input, i
         }
 
         for (int i = 0; i < params.frameLength; ++i) {
-            int dest = fStart + i;
-            double ws = static_cast<double>(suppressed[i]) * window[i];
-            outAcc[dest] += ws;
-            normAcc[dest] += window[i] * window[i];
+            const int destination = frameStart + i;
+            const double windowedSample = static_cast<double>(suppressed[i]) * window[i];
+            outputAccumulator[destination] += windowedSample;
+            normalizationAccumulator[destination] += window[i] * window[i];
         }
     }
 
-    QVector<float> output(input.size(), 0.0f);
-    for (int i = 0; i < input.size(); ++i) {
-        int pi = leadPad + i;
-        double norm = normAcc[pi];
-        double restored = norm > kNormalizationEpsilon ? outAcc[pi] / norm : static_cast<double>(input[i]);
+    QVector<float> output(inputSize, 0.0f);
+    for (int i = 0; i < inputSize; ++i) {
+        const int paddedIndex = leadPad + i;
+        const double norm = normalizationAccumulator[paddedIndex];
+        const double restored =
+            norm > kNormalizationEpsilon
+                ? outputAccumulator[paddedIndex] / norm
+                : static_cast<double>(input[i]);
         output[i] = static_cast<float>(restored);
     }
 
     if (g_debugLoggingEnabled.load(std::memory_order_relaxed)) {
-        double inRms = computeRms(input);
-        double outRms = computeRms(output);
-        double maxIn = 0.0, maxOut = 0.0;
-        for (float v : input) maxIn = std::max(maxIn, static_cast<double>(std::abs(v)));
-        for (float v : output) maxOut = std::max(maxOut, static_cast<double>(std::abs(v)));
-        double attenDb = 10.0 * log10(std::max(outRms*outRms/(inRms*inRms+1e-12), 1e-12));
+        const double inputRms = computeRms(input);
+        const double outputRms = computeRms(output);
+        double maxInput = 0.0;
+        double maxOutput = 0.0;
+        for (float value : input) {
+            maxInput = std::max(maxInput, static_cast<double>(std::abs(value)));
+        }
+        for (float value : output) {
+            maxOutput = std::max(maxOutput, static_cast<double>(std::abs(value)));
+        }
+        const double attenuationDb = 10.0 * std::log10(
+            std::max(outputRms * outputRms / (inputRms * inputRms + 1e-12), 1e-12));
 
         qDebug().nospace()
             << "=== TransientNoiseSuppressor::suppress ==="
-            << " Frames:" << frameCnt
+            << " Frames:" << frameCount
             << " BurstFrames:" << totalBurstFrames
-            << " RMS In:" << 20*log10(inRms) << "dB"
-            << " Out:" << 20*log10(outRms) << "dB"
-            << " Attenuation:" << attenDb << "dB"
-            << " PeakRetention:" << (maxIn>1e-12?maxOut/maxIn:1.0);
+            << " RMS In:" << 20 * std::log10(inputRms) << "dB"
+            << " Out:" << 20 * std::log10(outputRms) << "dB"
+            << " Attenuation:" << attenuationDb << "dB"
+            << " PeakRetention:" << (maxInput > 1e-12 ? maxOutput / maxInput : 1.0);
     }
 
     return output;
-}
-
-QVector<float> TransientNoiseSuppressor::suppressStreaming(const QVector<float>& input,
-                                                           int sampleRate,
-                                                           StreamingState& state)
-{
-    Parameters params = makeParameters(sampleRate, input.size());
-    return suppressStreaming(input, sampleRate, state, params);
-}
-
-QVector<float> TransientNoiseSuppressor::suppressStreaming(const QVector<float>& input,
-                                                           int sampleRate,
-                                                           StreamingState& state,
-                                                           const Parameters& params)
-{
-    if (input.isEmpty()) return {};
-    if (!state.initialized || state.sampleRate != sampleRate ||
-        state.parameters.frameLength != params.frameLength ||
-        state.parameters.hopLength != params.hopLength) {
-        initializeStreamingState(state, sampleRate, params);
-    }
-    if (!state.initialized) return input;
-
-    const int frameLen = params.frameLength;
-    const int hopLen = params.hopLength;
-    const int overlapLen = state.overlapLength;
-
-    state.analysisBuffer.reserve(state.analysisBuffer.size() + input.size());
-    for (float s : input) state.analysisBuffer.append(static_cast<double>(s));
-
-    QVector<float> output;
-    output.reserve(input.size());
-
-    int burstStreak = 0;
-    int totalBurstFrames = 0;
-    double localMeanEnergy = 0.01;
-
-    while (state.analysisBuffer.size() >= frameLen) {
-        for (int i = 0; i < frameLen; ++i)
-            state.analysisFrame[i] = static_cast<float>(state.analysisBuffer[i] * state.window[i]);
-
-        double frameEnergy = 0.0;
-        for (float s : state.analysisFrame) {
-            double v = static_cast<double>(s);
-            frameEnergy += v * v;
-        }
-        localMeanEnergy = 0.9 * localMeanEnergy + 0.1 * frameEnergy;
-
-        bool isBurst = false;
-        QVector<float> suppressed = suppressFrame(state.analysisFrame, sampleRate, params,
-                                                  localMeanEnergy, burstStreak, isBurst);
-        if (isBurst) {
-            ++burstStreak;
-            ++totalBurstFrames;
-        } else {
-            burstStreak = 0;
-        }
-
-        QVector<double> hopNum(hopLen, 0.0), hopDen(hopLen, 0.0);
-        for (int i = 0; i < overlapLen; ++i) {
-            hopNum[i] = state.synthesisOverlap[i];
-            hopDen[i] = state.normalizationOverlap[i];
-        }
-
-        QVector<double> nextSyn(overlapLen, 0.0), nextNorm(overlapLen, 0.0);
-        for (int i = 0; i < frameLen; ++i) {
-            double ws = static_cast<double>(suppressed[i]) * state.window[i];
-            double wE = state.window[i] * state.window[i];
-            if (i < hopLen) {
-                hopNum[i] += ws;
-                hopDen[i] += wE;
-            } else {
-                int ovIdx = i - hopLen;
-                if (ovIdx < overlapLen) {
-                    nextSyn[ovIdx] += ws;
-                    nextNorm[ovIdx] += wE;
-                }
-            }
-        }
-
-        for (int i = 0; i < hopLen; ++i) {
-            double den = hopDen[i];
-            double val = den > kNormalizationEpsilon ? hopNum[i] / den : 0.0;
-            output.append(static_cast<float>(val));
-        }
-
-        state.synthesisOverlap = std::move(nextSyn);
-        state.normalizationOverlap = std::move(nextNorm);
-        state.analysisBuffer.erase(state.analysisBuffer.begin(),
-                                   state.analysisBuffer.begin() + hopLen);
-    }
-
-    while (output.size() < input.size()) {
-        int missing = input.size() - output.size();
-        for (int i = 0; i < missing; ++i)
-            output.append(input[input.size() - missing + i]);
-    }
-    if (output.size() > input.size()) output.resize(input.size());
-
-    if (g_debugLoggingEnabled.load(std::memory_order_relaxed)) {
-        static int callCount = 0;
-        if (callCount == 0) {
-            double inRms = computeRms(input);
-            double outRms = computeRms(output);
-            double maxIn = 0.0, maxOut = 0.0;
-            for (float v : input) maxIn = std::max(maxIn, static_cast<double>(std::abs(v)));
-            for (float v : output) maxOut = std::max(maxOut, static_cast<double>(std::abs(v)));
-            double attenDb = 10.0 * log10(std::max(outRms*outRms/(inRms*inRms+1e-12), 1e-12));
-
-            qDebug().nospace()
-                << "=== TransientNoiseSuppressor::Stream ==="
-                << " BurstFrames:" << totalBurstFrames
-                << " RMS In:" << 20*log10(inRms) << "dB"
-                << " Out:" << 20*log10(outRms) << "dB"
-                << " Attenuation:" << attenDb << "dB"
-                << " PeakRetention:" << (maxIn>1e-12?maxOut/maxIn:1.0);
-        }
-        callCount++;
-    }
-
-    return output;
-}
-
-void TransientNoiseSuppressor::resetStreamingState(StreamingState& state)
-{
-    state = StreamingState{};
 }
 
 void TransientNoiseSuppressor::setDebugLoggingEnabled(bool enabled)

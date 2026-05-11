@@ -7,6 +7,7 @@ import BSSAS
 Page {
     id: root
 
+    property bool pageActive: true
     property real layout_margin: 20
     property real leftPanelSpacing: layout_margin / 2
     property int leftPanelWidth: 170

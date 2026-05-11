@@ -1,7 +1,9 @@
 /build/
 
+# Local tool/runtime config belongs in .config/.
+# Keep .git at repo root; moving it breaks repository metadata.
+/.config/
 /.claude/
-
 skills-lock.json
 
 CMakeUserPresets.json

@@ -307,11 +307,7 @@ QStringList DatabaseManager::searchFilesByTag(const QString& tagKeyword)
 
 bool DatabaseManager::initializeSearchDatabase()
 {
-    if (!ensureSearchDatabaseReady()) {
-        return false;
-    }
-
-    return rebuildFileIndex();
+    return ensureSearchDatabaseReady();
 }
 
 bool DatabaseManager::rebuildFileIndex()

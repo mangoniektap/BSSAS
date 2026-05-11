@@ -7,6 +7,7 @@ import MangoComponent
 Page {
     id: root
 
+    property bool pageActive: true
     property real pageMargin: 30
     property date recordingDate: new Date()
     property int recordingHour: new Date().getHours()

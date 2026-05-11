@@ -16,6 +16,7 @@ Item {
     anchors.fill: parent
     clip: true
 
+    property bool pageActive: true
     property bool verbose: false
     property bool includeProbs: false
     property string selectedUploadFilePath: ""

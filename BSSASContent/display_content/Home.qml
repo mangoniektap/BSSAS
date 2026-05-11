@@ -10,6 +10,7 @@ Item {
     Layout.fillHeight: true
     clip: false
 
+    property bool pageActive: true
     property var searchResults: []
     property bool hasSearched: false
     property var overviewStats: ({})
@@ -223,7 +224,7 @@ Item {
 
     Timer {
         interval: root.overviewRefreshIntervalMs
-        running: true
+        running: root.pageActive
         repeat: true
         onTriggered: root.refreshOverviewStats()
     }

@@ -32,34 +32,11 @@ public:
         double transientCrestThreshold = 10.0;
     };
 
-    struct StreamingState
-    {
-        bool initialized = false;
-        int sampleRate = 0;
-        Parameters parameters;
-
-        QVector<double> window;
-        QVector<double> analysisBuffer;
-        QVector<double> synthesisOverlap;
-        QVector<double> normalizationOverlap;
-        QVector<float> analysisFrame;
-    };
-
     static QVector<float> reduce(const QVector<float>& input, int sampleRate);
     static QVector<float> reduce(
         const QVector<float>& input,
         int sampleRate,
         const Parameters& parameters);
-    static QVector<float> reduceStreaming(
-        const QVector<float>& input,
-        int sampleRate,
-        StreamingState& state);
-    static QVector<float> reduceStreaming(
-        const QVector<float>& input,
-        int sampleRate,
-        StreamingState& state,
-        const Parameters& parameters);
-    static void resetStreamingState(StreamingState& state);
     static void setDebugLoggingEnabled(bool enabled);
     static bool debugLoggingEnabled();
 

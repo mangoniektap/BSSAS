@@ -7,6 +7,9 @@ import BSSAS
 import "./software_master_control_content"
 
 Page {
+    id: root
+
+    property bool pageActive: true
     property real layout_margin: 20
     property bool voiceLocalizationEnabled: false
     property var localizationPoints: [
@@ -18,7 +21,6 @@ Page {
         ({ channel: "CH6", label: "降结肠/小肠左", x: -0.58, y: 0.56 }),
         ({ channel: "CH7", label: "肝曲/升结肠上段", x: 0.62, y: 0.74 })
     ]
-    id: root
     anchors.fill: parent
 
     function openSensorLocalizationPage() {

@@ -12,5 +12,6 @@ QtObject {
     readonly property int x: Math.floor(Screen.width - width) / 2
     readonly property int y: Math.floor(Screen.height - height) / 2
 
-    readonly property string version: "26.04.12"
+    readonly property int pageCacheRetentionMs: 10 * 60 * 1000
+    readonly property string version: "26.05.10"
 }

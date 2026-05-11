@@ -11,6 +11,7 @@ import BSSAS
 Page {
     id: root
 
+    property bool pageActive: true
     readonly property string assetBase: "qrc:/qt/qml/BSSASContent/image resources/about/"
     readonly property real posterAspectRatio: 2171 / 576
     readonly property real waveAspectRatio: 1084 / 396

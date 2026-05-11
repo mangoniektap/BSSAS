@@ -389,22 +389,6 @@ QVector<float> reduceFrame(const QVector<float>& frame, int sampleRate,
     return reduced;
 }
 
-// ---------- 流式状态初始化 ----------
-void initializeStreamingState(MotionArtifactReduction::StreamingState& state,
-                              int sampleRate, const MotionArtifactReduction::Parameters& params)
-{
-    state.sampleRate = normalizeSampleRate(sampleRate);
-    state.parameters = params;
-    int frameLen = params.frameLength;
-    int hopLen = params.hopLength;
-    int overlap = std::max(0, frameLen - hopLen);
-    state.window = buildSqrtHannWindow(frameLen);
-    state.analysisBuffer.clear();
-    state.synthesisOverlap.fill(0.0, overlap);
-    state.normalizationOverlap.fill(0.0, overlap);
-    state.analysisFrame.fill(0.0f, frameLen);
-    state.initialized = frameLen > 0 && hopLen > 0;
-}
 } // namespace
 
 // ========== 公有方法实现 ==========
@@ -525,106 +509,6 @@ QVector<float> MotionArtifactReduction::reduce(const QVector<float>& input, int 
     return output;
 }
 
-// ---------- 流式处理（与原始结构一致，内部调用优化后的 reduceFrame）----------
-QVector<float> MotionArtifactReduction::reduceStreaming(const QVector<float>& input, int sampleRate,
-                                                        StreamingState& state)
-{
-    Parameters params = makeParameters(normalizeSampleRate(sampleRate), qMax(input.size(), 256));
-    return reduceStreaming(input, sampleRate, state, params);
-}
-
-QVector<float> MotionArtifactReduction::reduceStreaming(const QVector<float>& input, int sampleRate,
-                                                        StreamingState& state, const Parameters& params)
-{
-    if (input.isEmpty()) return {};
-    int effSR = normalizeSampleRate(sampleRate);
-    if (!state.initialized || state.sampleRate != effSR ||
-        state.parameters.frameLength != params.frameLength ||
-        state.parameters.hopLength != params.hopLength) {
-        initializeStreamingState(state, effSR, params);
-    }
-    if (!state.initialized) return input;
-
-    int frameLen = params.frameLength;
-    int hopLen = params.hopLength;
-    int overlapLen = std::max(0, frameLen - hopLen);
-
-    state.analysisBuffer.reserve(state.analysisBuffer.size() + input.size());
-    for (float s : input) state.analysisBuffer.append(static_cast<double>(s));
-
-    QVector<float> output;
-    output.reserve(input.size());
-
-    while (state.analysisBuffer.size() >= frameLen) {
-        for (int i = 0; i < frameLen; ++i)
-            state.analysisFrame[i] = static_cast<float>(state.analysisBuffer[i] * state.window[i]);
-
-        QVector<float> reducedFrame = reduceFrame(state.analysisFrame, effSR, state.parameters);
-        if (reducedFrame.size() != frameLen) break;
-
-        QVector<double> hopNum(hopLen, 0.0), hopDen(hopLen, 0.0);
-        for (int i = 0; i < overlapLen; ++i) {
-            hopNum[i] = state.synthesisOverlap[i];
-            hopDen[i] = state.normalizationOverlap[i];
-        }
-
-        QVector<double> nextSyn(overlapLen, 0.0), nextNorm(overlapLen, 0.0);
-        for (int i = 0; i < frameLen; ++i) {
-            double ws = static_cast<double>(reducedFrame[i]) * state.window[i];
-            double wE = state.window[i] * state.window[i];
-            if (i < hopLen) {
-                hopNum[i] += ws;
-                hopDen[i] += wE;
-            } else {
-                int ovIdx = i - hopLen;
-                if (ovIdx < overlapLen) {
-                    nextSyn[ovIdx] += ws;
-                    nextNorm[ovIdx] += wE;
-                }
-            }
-        }
-
-        for (int i = 0; i < hopLen; ++i) {
-            double den = hopDen[i];
-            double val = den > kNormalizationEpsilon ? hopNum[i] / den : 0.0;
-            output.append(static_cast<float>(val));
-        }
-
-        state.synthesisOverlap = std::move(nextSyn);
-        state.normalizationOverlap = std::move(nextNorm);
-        state.analysisBuffer.erase(state.analysisBuffer.begin(), state.analysisBuffer.begin() + hopLen);
-    }
-
-    // 剩余样本直接复制
-    while (output.size() < input.size()) {
-        int missing = input.size() - output.size();
-        for (int i = 0; i < missing; ++i)
-            output.append(input[input.size() - missing + i]);
-    }
-    if (output.size() > input.size()) output.resize(input.size());
-
-    if (g_debugLoggingEnabled.load(std::memory_order_relaxed)) {
-        double inRms = computeRms(input);
-        double outRms = computeRms(output);
-        double maxIn = 0.0, maxOut = 0.0;
-        for (float v : input) maxIn = qMax(maxIn, std::abs(v));
-        for (float v : output) maxOut = qMax(maxOut, std::abs(v));
-        double attenDb = 10.0 * log10(qMax(outRms*outRms/(inRms*inRms+1e-12), 1e-12));
-        qDebug().nospace()
-            << "=== MotionArtifact::reduceStreaming ==="
-            << " RMS In:" << 20*log10(inRms) << "dB"
-            << " Out:" << 20*log10(outRms) << "dB"
-            << " Attenuation:" << attenDb << "dB"
-            << " PeakRetention:" << (maxIn>1e-12?maxOut/maxIn:1.0);
-    }
-
-    return output;
-}
-
-void MotionArtifactReduction::resetStreamingState(StreamingState& state)
-{
-    state = StreamingState{};
-}
 
 void MotionArtifactReduction::setDebugLoggingEnabled(bool enabled)
 {
