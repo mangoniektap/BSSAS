@@ -1,3 +1,8 @@
+/**
+ * @file LocalizationIntestinalSound.cpp
+ * @brief 实时肠鸣音声源定位模块，基于GCC-PHAT广义互相关和传感器阵列到达时间差（TDOA），融合空间似然和幅值衰减模型实现腹部声源二维网格定位。
+ */
+
 #include "LocalizationIntestinalSound.h"
 #include "KfrDftUtils.h"
 
@@ -62,6 +67,7 @@ const QVector<Point2D> kSensorPositions = {
 
 const QVector<double> kChannelGainBias = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 
+/** @brief 按预设范围与步长构建二维搜索网格。 */
 QVector<Point2D> buildSearchGrid()
 {
     QVector<Point2D> grid;
@@ -94,6 +100,7 @@ double safeLog(double value)
     return std::log(std::max(value, kMapEpsilon));
 }
 
+/** @brief 计算样本的绝对平均值。 */
 double averageAbsoluteValue(const QVector<float>& samples)
 {
     if (samples.isEmpty()) {
@@ -108,6 +115,7 @@ double averageAbsoluteValue(const QVector<float>& samples)
     return sum / static_cast<double>(samples.size());
 }
 
+/** @brief 计算信号的均方根（RMS）值。 */
 double rmsValue(const QVector<float>& samples)
 {
     if (samples.isEmpty()) {
@@ -122,6 +130,12 @@ double rmsValue(const QVector<float>& samples)
     return std::sqrt(energy / static_cast<double>(samples.size()));
 }
 
+/**
+ * @brief 将输入信号居中填充到目标尺寸，并移除直流偏置。
+ * @param samples 输入信号。
+ * @param targetSize 目标输出尺寸。
+ * @returns 居中填充并去直流的信号。
+ */
 QVector<float> centeredPaddedWindow(const QVector<float>& samples, int targetSize)
 {
     QVector<float> out(targetSize, 0.0f);
@@ -149,6 +163,12 @@ QVector<float> centeredPaddedWindow(const QVector<float>& samples, int targetSiz
     return out;
 }
 
+/**
+ * @brief 计算两个信号的GCC-PHAT加权广义互相关。
+ * @param x 第一路信号。
+ * @param y 第二路信号（与x等长）。
+ * @returns 按滞后轴排列的相关系数向量，索引0对应滞后 -N/2。
+ */
 QVector<double> computeGccPhatCorrelation(const QVector<float>& x, const QVector<float>& y)
 {
     if (x.size() != y.size() || x.isEmpty()) {
@@ -179,6 +199,7 @@ QVector<double> computeGccPhatCorrelation(const QVector<float>& x, const QVector
     return lagCorrelation;
 }
 
+/** @brief 估计GCC输出主峰尖锐度，用于评价互相关质量。 */
 double estimatePeakSharpness(const QVector<double>& gcc)
 {
     if (gcc.isEmpty()) {
@@ -314,6 +335,7 @@ QString lowConfidenceText(const Point2D& bestPoint, const Point2D& secondPoint)
 class RealtimeIntestinalSoundEventDetector
 {
 public:
+    /** @brief 基于中通道平均绝对值检测实时肠鸣音事件是否发生。 */
     bool detect(const QVector<float>& fusedMiddleSamples, double* eventScore) const
     {
         const double score = averageAbsoluteValue(fusedMiddleSamples);
@@ -327,6 +349,16 @@ public:
 class RealtimeIntestinalSoundLocalizer
 {
 public:
+    /**
+     * @brief 对多通道音频帧进行二维声源定位。
+     * @param channelSamples 7通道采样数据。
+     * @param sampleRate 采样率。
+     * @param bestChannelIndex 输出最佳匹配的传感器通道编号。
+     * @param confidence 输出定位置信度。
+     * @param channelScores 输出各通道得分。
+     * @param decisionText 输出定位决策描述文本。
+     * @returns 定位是否成功。
+     */
     bool localize(
         const QVector<QVector<float>>& channelSamples,
         int sampleRate,
@@ -572,6 +604,10 @@ LocalizationIntestinalSound::LocalizationIntestinalSound(QObject* parent)
 
 LocalizationIntestinalSound::~LocalizationIntestinalSound() = default;
 
+/**
+ * @brief 启动实时定位处理管道。
+ * @param sampleRate 采样率（Hz），必须大于0。
+ */
 void LocalizationIntestinalSound::startRealtimePipeline(int sampleRate)
 {
     bool runningChangedNeeded = false;
@@ -625,6 +661,10 @@ void LocalizationIntestinalSound::stopRealtimePipeline()
     }
 }
 
+/**
+ * @brief 处理一帧实时多通道数据：事件检测 -> 声源定位 -> 结果通知。
+ * @param channelSamples 7通道采样帧。
+ */
 void LocalizationIntestinalSound::processRealtimeFrame(const QVector<QVector<float>>& channelSamples)
 {
     if (channelSamples.size() != kExpectedChannelCount) {
@@ -702,6 +742,11 @@ bool LocalizationIntestinalSound::localizerActive() const
     return m_localizerActive;
 }
 
+/**
+ * @brief 融合中间三通道（右中、正中、左中）信号为单通道。
+ * @param channelSamples 7通道采样帧。
+ * @returns 按样本平均的融合信号。
+ */
 QVector<float> LocalizationIntestinalSound::fuseMiddleChannels(
     const QVector<QVector<float>>& channelSamples) const
 {

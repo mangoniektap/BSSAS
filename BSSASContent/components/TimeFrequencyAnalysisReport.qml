@@ -1,4 +1,8 @@
-﻿import QtQuick
+﻿/**
+ * @file TimeFrequencyAnalysisReport.qml
+ * @brief 时频分析报告弹窗。展示时域波形图、频谱图及导入分析统计信息，支持报告导出、数据保存和悬停提示。
+ */
+import QtQuick
 import QtQuick.Controls
 import QtQuick.Effects
 import MangoComponent
@@ -17,11 +21,22 @@ Popup {
     opacity: 0
     scale: 0.9
 
+    /**
+     * @brief 将颜色值与指定透明度混合
+     * @param sourceColor 源颜色值
+     * @param alphaValue 透明度（0.0~1.0）
+     * @returns 混合后的RGBA颜色值
+     */
     function colorWithAlpha(sourceColor, alphaValue) {
         const color = Qt.color(sourceColor)
         return Qt.rgba(color.r, color.g, color.b, alphaValue)
     }
 
+    /**
+     * @brief 从文件路径中提取文件名
+     * @param filePath 完整文件路径
+     * @returns 提取的文件名，空字符串表示路径无效
+     */
     function extractFileName(filePath) {
         if (!filePath || filePath.length === 0) {
             return ""
@@ -32,11 +47,22 @@ Popup {
         return pathSegments.length > 0 ? pathSegments[pathSegments.length - 1] : filePath
     }
 
+    /**
+     * @brief 安全解析数值，无效时返回回退值
+     * @param value 待解析的值
+     * @param fallbackValue 解析失败时的回退值
+     * @returns 有效的数值或回退值
+     */
     function numericValue(value, fallbackValue) {
         const parsedValue = Number(value)
         return isFinite(parsedValue) ? parsedValue : fallbackValue
     }
 
+    /**
+     * @brief 将秒数格式化为可读时长字符串
+     * @param secondsValue 秒数值
+     * @returns 格式化的时长字符串，如"2分30.00秒"，无效时返回"未记录"
+     */
     function formatDurationSeconds(secondsValue) {
         const seconds = root.numericValue(secondsValue, -1)
         if (seconds < 0) {
@@ -52,6 +78,11 @@ Popup {
         return seconds >= 10 ? seconds.toFixed(2) + " 秒" : seconds.toFixed(3) + " 秒"
     }
 
+    /**
+     * @brief 将毫秒数格式化为可读时间字符串
+     * @param millisecondsValue 毫秒数值
+     * @returns 格式化的时间字符串，如"1.50 s"或"150 ms"，无效时返回"未记录"
+     */
     function formatMilliseconds(millisecondsValue) {
         const milliseconds = root.numericValue(millisecondsValue, -1)
         if (milliseconds < 0) {
@@ -65,6 +96,11 @@ Popup {
         return milliseconds >= 100 ? milliseconds.toFixed(0) + " ms" : milliseconds.toFixed(1) + " ms"
     }
 
+    /**
+     * @brief 计算导入分析的总耗时，优先使用显式totalMs，否则累加各步骤耗时
+     * @param summaryObject 导入分析摘要对象
+     * @returns 总耗时（毫秒），无有效数据时返回-1
+     */
     function importedAnalysisTotalMs(summaryObject) {
         const summary = summaryObject || {}
         const timings = summary.timings || {}
@@ -99,6 +135,10 @@ Popup {
         return hasValue ? total : -1
     }
 
+    /**
+     * @brief 构建导入分析摘要文本，包含音频参数和各处理步骤耗时
+     * @returns 多行格式化的分析统计文本
+     */
     function importedAnalysisSummaryText() {
         const summary = root.importedAnalysisSummary || {}
         const sampleCount = root.numericValue(summary.sampleCount, 0)

@@ -1,3 +1,8 @@
+/**
+ * @file SystemStatusMonitor.cpp
+ * @brief 系统状态监控模块，定时刷新存储、内存、CPU使用率及采集设备连接/采集状态，变化超过阈值时触发状态变更通知。
+ */
+
 #include "SystemStatusMonitor.h"
 
 #include "DaqDeviceManager.h"
@@ -109,6 +114,9 @@ bool SystemStatusMonitor::deviceConnected() const
     return m_deviceConnected;
 }
 
+/**
+ * @brief 周期刷新存储、内存、CPU使用率及设备状态，变化超过阈值时发出通知。
+ */
 void SystemStatusMonitor::refresh()
 {
     bool changed = false;
@@ -143,6 +151,10 @@ void SystemStatusMonitor::refresh()
     }
 }
 
+/**
+ * @brief 刷新采集设备连接与采集状态。
+ * @returns 状态是否发生变化。
+ */
 bool SystemStatusMonitor::refreshDeviceState()
 {
     bool nextDeviceConnected = false;

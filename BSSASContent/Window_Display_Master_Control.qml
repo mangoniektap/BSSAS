@@ -1,3 +1,7 @@
+/**
+ * @file Window_Display_Master_Control.qml
+ * @brief 窗口显示主控。根据导航栏索引动态加载首页、总控、监测等页面的内容区域。
+ */
 import QtQuick
 import BSSAS
 
@@ -19,6 +23,9 @@ Item {
         "./display_content/About.qml"
     ]
 
+    /**
+     * @brief 播放当前页面的淡入滑入过渡动画。
+     */
     function animateCurrentPage() {
         enterAnim.stop()
         pageContainer.opacity = 0

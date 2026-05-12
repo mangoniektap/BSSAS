@@ -1,3 +1,7 @@
+/**
+ * @file AppState.qml
+ * @brief 全局应用状态单例。集中管理信号处理与识别服务的持久化配置。
+ */
 pragma Singleton
 import QtQuick
 import Qt.labs.settings

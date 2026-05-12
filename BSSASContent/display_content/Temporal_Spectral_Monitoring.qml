@@ -1,3 +1,7 @@
+/**
+ * @file Temporal_Spectral_Monitoring.qml
+ * @brief 时频谱监测页面。对多通道实时采集信号进行时域波形与频域谱图可视化，支持通道切换与数据保存。
+ */
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
@@ -40,11 +44,22 @@ Page {
     readonly property color _actionButtonColor: Theme.primary
     readonly property color _actionButtonActiveColor: Theme.primaryLighter
 
+    /**
+     * @brief 为源颜色叠加 alpha 通道值，返回新的 rgba 颜色。
+     * @param sourceColor 源颜色
+     * @param alphaValue alpha 值 [0,1]
+     * @returns 带 alpha 的 Qt.rgba 颜色值
+     */
     function colorWithAlpha(sourceColor, alphaValue) {
         const color = Qt.color(sourceColor)
         return Qt.rgba(color.r, color.g, color.b, alphaValue)
     }
 
+    /**
+     * @brief 从文件路径中提取文件名。
+     * @param filePath 完整文件路径
+     * @returns 文件名，空路径返回空字符串
+     */
     function extractFileName(filePath) {
         if (!filePath || filePath.length === 0) {
             return ""
@@ -55,6 +70,10 @@ Page {
         return pathSegments.length > 0 ? pathSegments[pathSegments.length - 1] : filePath
     }
 
+    /**
+     * @brief 获取第一个已激活通道的索引，无激活通道时返回 -1。
+     * @returns 首个激活通道索引
+     */
     function firstActiveChannelIndex() {
         if (!root.activeChannels || root.activeChannels.length !== root.channelNames.length) {
             return 0
@@ -67,6 +86,10 @@ Page {
         return -1
     }
 
+    /**
+     * @brief 确保当前选中通道为激活状态；若当前通道已关闭则自动切换至首个激活通道。
+     * @param showToast 是否显示切换提示
+     */
     function ensureActiveChannelSelected(showToast) {
         const activeIndex = firstActiveChannelIndex()
         if (activeIndex < 0) {
@@ -90,6 +113,9 @@ Page {
         }
     }
 
+    /**
+     * @brief 启动实时采集：初始化数据库、清空波形与频谱，依次启动缓冲读取、信号预处理、降采样及 DFT 计算。
+     */
     function startRealtimeCollection() {
         if (!daqManager.isCollecting) {
             channelToast.showError("请先在软件总控中启动DAQ")
@@ -110,6 +136,10 @@ Page {
         console.log("开始绘制")
     }
 
+    /**
+     * @brief 停止实时采集：依次停止预处理、降采样、DFT 计算及缓冲读取，完成当前采集记录。
+     * @param needToast 是否在弹出的 Toast 中提示停止信息
+     */
     function stopRealtimeCollection(needToast) {
         signalPreprocessing.stopPreprocessing()
         adaptiveDownsampling.stopDownsamplingProcessing()
@@ -482,6 +512,7 @@ Page {
         }
 
         /*
+         * 预留：去噪后时域波形与频域频谱视图（暂未启用）
         DataVisualizationGraphCartesian {
             id: denoisedTimeWaveform
         }

@@ -1,3 +1,8 @@
+/** @file AdaptiveDownsampling.cpp
+ *  @brief 自适应降采样模块实现。使用 Largest-Triangle-Three-Buckets (LTTB) 算法对时域波形数据进行降采样，
+ *         通过工作线程定时处理原始数据，生成适合 UI 波形显示的降采样数据点。
+ */
+
 #include "AdaptiveDownsampling.h"
 
 #include "DataManager.h"
@@ -156,6 +161,11 @@ AdaptiveDownsampling::~AdaptiveDownsampling()
     }
 }
 
+/** @brief 对原始波形数据进行单级 LTTB 降采样，生成当前缩放级别对应的显示点序列。
+ *  @param source 原始采样数据
+ *  @param sampleRate 信号采样率 (Hz)
+ *  @returns 降采样后的 (时间秒, 幅值) 点序列
+ */
 QVector<QPointF> AdaptiveDownsampling::buildCurrentLevelDownsampledPoints(
     const QVector<float>& source,
     int sampleRate)
@@ -233,6 +243,7 @@ int DownsamplingWorker::calculateTargetPointCount(qsizetype sampleCount, int sam
     return resolveTargetPointCount(sampleCount, sampleRate);
 }
 
+/** @brief 定时器回调：从信号预处理缓存获取最新数据，执行降采样并将结果写入 DataManager。 */
 void DownsamplingWorker::processing()
 {
     const QVector<float> rawData = SignalPreprocessing::instance()->getDataCache();

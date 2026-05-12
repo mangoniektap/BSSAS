@@ -1,3 +1,7 @@
+/**
+ * @file StandbyAnimation.qml
+ * @brief 待机动画组件。以网格方块闪烁动画表示加载或等待状态，支持自定义方块颜色、数量、列数和动画时序。
+ */
 pragma ComponentBehavior: Bound
 
 import QtQuick
@@ -52,12 +56,18 @@ Item {
                 rotation: root.inactiveRotation
                 transformOrigin: Item.Center
 
+                /**
+                 * @brief 将方块重置为非激活外观状态
+                 */
                 function resetState() {
                     opacity = root.inactiveOpacity
                     scale = root.inactiveScale
                     rotation = root.inactiveRotation
                 }
 
+                /**
+                 * @brief 根据运行状态重新启动动画，先停止旧动画再按延迟启动新动画
+                 */
                 function restartAnimation() {
                     startDelay.stop()
                     blink.stop()

@@ -1,7 +1,6 @@
 /**
  * @file TransientNoiseSuppressor.cpp
- * @brief Offline transient noise suppression implementation with crest-factor detection,
- *        low-frequency bowel-sound protection, and OLA synthesis.
+ * @brief 离线瞬态噪声抑制模块，基于波峰因子检测、低频肠鸣音保护和重叠相加（OLA）合成策略实现脉冲式噪声衰减。
  */
 #include "TransientNoiseSuppressor.h"
 
@@ -18,7 +17,7 @@ constexpr double kNormalizationEpsilon = 1e-8;
 
 std::atomic_bool g_debugLoggingEnabled = true;
 
-/** @brief Build a sqrt-Hann window for matched analysis and synthesis. */
+/** @brief 构建sqrt-Hann窗函数，用于匹配分析和合成。 */
 QVector<double> buildSqrtHannWindow(int frameLength)
 {
     QVector<double> window(frameLength, 1.0);
@@ -34,7 +33,7 @@ QVector<double> buildSqrtHannWindow(int frameLength)
     return window;
 }
 
-/** @brief Compute signal RMS while treating non-finite values as silence. */
+/** @brief 计算信号RMS值，将非有限值视为静音。 */
 double computeRms(const QVector<float>& samples)
 {
     if (samples.isEmpty()) {
@@ -49,7 +48,7 @@ double computeRms(const QVector<float>& samples)
     return std::sqrt(sum / samples.size());
 }
 
-/** @brief Compute crest factor, peak divided by RMS, for transient detection. */
+/** @brief 计算波峰因子（峰值除以RMS），用于瞬态检测。 */
 double computeCrestFactor(const QVector<float>& samples)
 {
     const double rms = computeRms(samples);
@@ -64,7 +63,7 @@ double computeCrestFactor(const QVector<float>& samples)
     return peak / rms;
 }
 
-/** @brief Compute zero-crossing count retained for future transient classifiers. */
+/** @brief 计算过零次数，保留用于未来瞬态分类器。 */
 int computeZeroCrossingRate(const QVector<float>& samples)
 {
     if (samples.size() < 2) {
@@ -82,7 +81,7 @@ int computeZeroCrossingRate(const QVector<float>& samples)
     return crossings;
 }
 
-/** @brief Estimate low-frequency energy fraction with a first-order IIR lowpass approximation. */
+/** @brief 使用一阶IIR低通近似估计低频能量占比。 */
 double lowFreqEnergyFraction(const QVector<float>& samples, int sampleRate, double upperHz)
 {
     if (samples.size() < 4) {
@@ -103,14 +102,14 @@ double lowFreqEnergyFraction(const QVector<float>& samples, int sampleRate, doub
 }
 
 /**
- * @brief Detect and attenuate one analysis frame.
- * @param frame Windowed analysis frame.
- * @param sampleRate Sampling rate in Hz.
- * @param params Algorithm parameters.
- * @param localMeanEnergy Recent local mean frame energy.
- * @param consecutiveBurstFrames Number of consecutive frames already classified as bursts.
- * @param isBurst Outputs whether this frame was attenuated as a transient burst.
- * @returns Suppressed frame samples.
+ * @brief 检测并衰减单个分析帧中的瞬态噪声。
+ * @param frame 加窗分析帧。
+ * @param sampleRate 采样率（Hz）。
+ * @param params 算法参数。
+ * @param localMeanEnergy 近期局部平均帧能量。
+ * @param consecutiveBurstFrames 已分类为瞬态的连续帧数。
+ * @param isBurst 输出该帧是否被识别为瞬态脉冲并衰减。
+ * @returns 抑制后的帧采样数据。
  */
 QVector<float> suppressFrame(
     const QVector<float>& frame,
@@ -159,6 +158,12 @@ QVector<float> suppressFrame(
 }
 } // namespace
 
+/**
+ * @brief 根据采样率自适应生成抑制参数。
+ * @param sampleRate 采样率（Hz）。
+ * @param sampleCount 保留参数（未使用）。
+ * @returns 配置好的参数结构体。
+ */
 TransientNoiseSuppressor::Parameters
 TransientNoiseSuppressor::makeParameters(int sampleRate, int sampleCount)
 {
@@ -176,6 +181,13 @@ QVector<float> TransientNoiseSuppressor::suppress(const QVector<float>& input, i
     return suppress(input, sampleRate, params);
 }
 
+/**
+ * @brief 使用指定参数对整个信号进行瞬态噪声抑制（OLA分帧处理）。
+ * @param input 输入浮点信号。
+ * @param sampleRate 采样率（Hz）。
+ * @param params 算法参数。
+ * @returns 瞬态噪声抑制后的信号。
+ */
 QVector<float> TransientNoiseSuppressor::suppress(
     const QVector<float>& input,
     int sampleRate,

@@ -1,3 +1,8 @@
+/** @file DatabaseManager.cpp
+ *  @brief 数据库管理器实现。负责 SQLite 搜索索引数据库的初始化、文件索引重建、
+ *         按关键词/标签搜索文件、首页概览统计（采集量、分析量、异常报告数）以及文件打开操作。
+ */
+
 #include "DatabaseManager.h"
 #include "DatabaseStoragePaths.h"
 
@@ -60,6 +65,11 @@ bool reportLooksAbnormal(const QFileInfo& fileInfo)
            containsAnyAbnormalMarker(QString::fromLatin1(bytes).toLower());
 }
 
+/** @brief 递归遍历目录下的所有文件，统计文件总数、今日/昨日文件数及异常报告数。
+ *  @param directoryPath 目标目录路径
+ *  @param scanAbnormalReports 是否扫描异常报告标记
+ *  @returns 包含统计信息的 DirectoryStats 结构
+ */
 DirectoryStats collectDirectoryStats(const QString& directoryPath, bool scanAbnormalReports)
 {
     DirectoryStats stats;
@@ -125,6 +135,10 @@ DatabaseManager* DatabaseManager::instance()
     return &manager;
 }
 
+/** @brief 打开指定路径的 SQLite 数据库，并初始化所需的表结构。
+ *  @param dbPath 数据库文件路径
+ *  @returns 打开并初始化成功返回 true
+ */
 bool DatabaseManager::openDatabase(const QString& dbPath)
 {
     m_databaseFilePath = dbPath;
@@ -207,6 +221,11 @@ bool DatabaseManager::initializeTables()
     return true;
 }
 
+/** @brief 为指定文件添加标签（在一个事务中完成文件插入、标签插入和关联建立）。
+ *  @param filePath 文件绝对路径
+ *  @param tags 标签名称列表
+ *  @returns 全部标签添加成功返回 true
+ */
 bool DatabaseManager::addFileTags(const QString& filePath, const QStringList& tags)
 {
     if (!m_db.isOpen()) {
@@ -305,11 +324,17 @@ QStringList DatabaseManager::searchFilesByTag(const QString& tagKeyword)
     return results;
 }
 
+/** @brief 初始化搜索数据库：确保托管目录存在并打开/创建搜索索引数据库。
+ *  @returns 初始化成功返回 true
+ */
 bool DatabaseManager::initializeSearchDatabase()
 {
     return ensureSearchDatabaseReady();
 }
 
+/** @brief 清空并重建整个文件索引（扫描音频和报告两个托管目录）。
+ *  @returns 索引重建成功返回 true
+ */
 bool DatabaseManager::rebuildFileIndex()
 {
     if (!ensureSearchDatabaseReady()) {
@@ -341,6 +366,10 @@ bool DatabaseManager::rebuildFileIndex()
     return true;
 }
 
+/** @brief 按关键词搜索文件索引，返回匹配文件的元信息列表。
+ *  @param keyword 搜索关键词（大小写不敏感）
+ *  @returns 包含 fileName、absolutePath、relativePath、category 等字段的 QVariantMap 列表
+ */
 QVariantList DatabaseManager::searchFiles(const QString& keyword)
 {
     QVariantList results;
@@ -393,6 +422,9 @@ QVariantList DatabaseManager::searchFiles(const QString& keyword)
     return results;
 }
 
+/** @brief 收集首页概览统计数据：今日/昨日采集量、分析量、异常报告数及数据库记录总数。
+ *  @returns 包含统计字段的 QVariantMap
+ */
 QVariantMap DatabaseManager::homeOverviewStats()
 {
     if (!ensureManagedDirectoriesExist()) {

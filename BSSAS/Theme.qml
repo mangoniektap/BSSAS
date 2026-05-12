@@ -1,3 +1,7 @@
+/**
+ * @file Theme.qml
+ * @brief 主题样式定义单例。统一管理配色方案、圆角、字号等全局视觉常量。
+ */
 pragma Singleton
 import QtQuick
 
@@ -93,6 +97,12 @@ QtObject {
     readonly property int fontTiny: 11
     readonly property int fontNumber: 28
 
+    /**
+     * @brief 返回指定颜色的指定透明度版本。
+     * @param sourceColor 源颜色
+     * @param alphaValue 目标不透明度（0.0 ~ 1.0）
+     * @returns rgba 色值
+     */
     function withAlpha(sourceColor, alphaValue) {
         const color = Qt.color(sourceColor)
         return Qt.rgba(color.r, color.g, color.b, alphaValue)

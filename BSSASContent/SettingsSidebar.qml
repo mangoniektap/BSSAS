@@ -1,4 +1,8 @@
-﻿import QtQuick
+﻿/**
+ * @file SettingsSidebar.qml
+ * @brief 设置侧边栏。展示主题偏好、终端管理和更新检查等系统设置项。
+ */
+import QtQuick
 import QtQuick.Controls
 import BSSAS
 import MangoComponent
@@ -37,6 +41,12 @@ Item {
 
     signal closeRequested()
 
+    /**
+     * @brief 返回指定颜色的指定透明度版本，用于计算遮罩和分割线等半透明色值。
+     * @param colorValue 源颜色
+     * @param alpha 目标不透明度（0.0 ~ 1.0）
+     * @returns rgba 色值
+     */
     function withOpacity(colorValue, alpha) {
         const color = Qt.color(colorValue)
         return Qt.rgba(color.r, color.g, color.b, alpha)

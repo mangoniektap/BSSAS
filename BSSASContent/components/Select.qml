@@ -1,4 +1,8 @@
-﻿import QtQuick
+﻿/**
+ * @file Select.qml
+ * @brief 下拉选择框组件。基于 ComboBox 封装，支持自定义样式、瀑布流弹出动画和滚动指示器。
+ */
+import QtQuick
 import QtQuick.Controls
 import BSSAS
 ComboBox {

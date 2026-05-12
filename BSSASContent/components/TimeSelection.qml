@@ -1,3 +1,7 @@
+/**
+ * @file TimeSelection.qml
+ * @brief 时间选择器组件。支持表盘拨动和文本输入两种模式，含24小时/12小时切换及AM/PM选择。
+ */
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
@@ -53,15 +57,31 @@ Item {
         }
     }
 
+    /**
+     * @brief 将颜色值与指定透明度混合
+     * @param sourceColor 源颜色值
+     * @param alphaValue 透明度（0.0~1.0）
+     * @returns 混合后的RGBA颜色值
+     */
     function colorWithAlpha(sourceColor, alphaValue) {
         const color = Qt.color(sourceColor)
         return Qt.rgba(color.r, color.g, color.b, alphaValue)
     }
 
+    /**
+     * @brief 将数值补零至两位字符串
+     * @param value 待格式化的数值
+     * @returns 两位补零字符串
+     */
     function padNumber(value) {
         return normalizeMinuteValue(value).toString().padStart(2, "0")
     }
 
+    /**
+     * @brief 将小时值归一化到0~23范围内
+     * @param value 输入的小时值
+     * @returns 归一化后的小时值（0~23）
+     */
     function normalizeHourValue(value) {
         const parsedValue = parseInt(value, 10)
         if (isNaN(parsedValue)) {
@@ -71,6 +91,11 @@ Item {
         return Math.max(0, Math.min(23, parsedValue))
     }
 
+    /**
+     * @brief 将分钟值归一化到0~59范围内
+     * @param value 输入的分钟值
+     * @returns 归一化后的分钟值（0~59）
+     */
     function normalizeMinuteValue(value) {
         const parsedValue = parseInt(value, 10)
         if (isNaN(parsedValue)) {
@@ -80,6 +105,11 @@ Item {
         return Math.max(0, Math.min(59, parsedValue))
     }
 
+    /**
+     * @brief 根据当前制式显示小时数值，12小时制下0点显示为12
+     * @param value 小时值
+     * @returns 显示用的小时数值
+     */
     function displayHourNumber(value) {
         const normalizedHour = normalizeHourValue(value)
         if (is24Hour) {
@@ -90,10 +120,18 @@ Item {
         return hourIn12 === 0 ? 12 : hourIn12
     }
 
+    /**
+     * @brief 将小时值格式化为两位显示文本
+     * @param value 小时值
+     * @returns 两位补零的小时文本
+     */
     function displayHourText(value) {
         return displayHourNumber(value).toString().padStart(2, "0")
     }
 
+    /**
+     * @brief 刷新文本输入框中显示的小时和分钟值
+     */
     function refreshInputs() {
         if (hourInput) {
             hourInput.text = displayHourText(_tempHour)
@@ -106,6 +144,9 @@ Item {
         }
     }
 
+    /**
+     * @brief 将外部hour/minute属性同步到内部临时变量，并重置模式和输入状态
+     */
     function syncFromSelection() {
         _tempHour = normalizeHourValue(hour)
         _tempMinute = normalizeMinuteValue(minute)
@@ -114,6 +155,9 @@ Item {
         refreshInputs()
     }
 
+    /**
+     * @brief 打开时间选择器弹窗，将覆盖层挂载到顶层并播放入场动画
+     */
     function open() {
         let topRoot = root
         while (topRoot.parent) {
@@ -139,6 +183,10 @@ Item {
         enterAnimation.start()
     }
 
+    /**
+     * @brief 关闭时间选择器，可选是否触发rejected信号
+     * @param shouldReject 是否在关闭后发送rejected信号
+     */
     function close(shouldReject) {
         _emitRejectedOnClose = shouldReject === true
         enterAnimation.stop()
@@ -146,6 +194,10 @@ Item {
         exitAnimation.start()
     }
 
+    /**
+     * @brief 切换上午/下午（12小时制使用）
+     * @param isPm true表示下午，false表示上午
+     */
     function setMeridiem(isPm) {
         const baseHour = normalizeHourValue(_tempHour) % 12
         _tempHour = baseHour + (isPm ? 12 : 0)
@@ -154,6 +206,10 @@ Item {
         }
     }
 
+    /**
+     * @brief 应用文本输入的时间值，校验并更新临时变量
+     * @returns 校验通过返回true，否则返回false
+     */
     function applyInputTime() {
         const parsedHour = parseInt(hourInput.text.trim(), 10)
         const parsedMinute = parseInt(minuteInput.text.trim(), 10)
@@ -192,6 +248,11 @@ Item {
         return true
     }
 
+    /**
+     * @brief 计算小时标签在表盘上的半径，24小时制下内圈/外圈区分
+     * @param value 小时值
+     * @returns 表盘半径像素值
+     */
     function dialRadiusForHour(value) {
         if (_mode === 1 || !is24Hour) {
             return 108
@@ -200,15 +261,33 @@ Item {
         return value === 0 || value > 12 ? 108 : 72
     }
 
+    /**
+     * @brief 计算两个分钟值在表盘上的环形最短距离
+     * @param firstMinute 第一个分钟值
+     * @param secondMinute 第二个分钟值
+     * @returns 环形最短距离（0~30）
+     */
     function circularMinuteDistance(firstMinute, secondMinute) {
         const delta = Math.abs(normalizeMinuteValue(firstMinute) - normalizeMinuteValue(secondMinute))
         return Math.min(delta, 60 - delta)
     }
 
+    /**
+     * @brief 判断表盘上的分钟标签是否被选中
+     * @param labelMinute 标签代表的分钟值
+     * @returns 是否被当前选中分钟覆盖
+     */
     function isMinuteLabelSelected(labelMinute) {
         return circularMinuteDistance(_tempMinute, labelMinute) <= 2
     }
 
+    /**
+     * @brief 根据鼠标位置更新小时或分钟值，将鼠标坐标转为表盘角度后映射到时间
+     * @param mouseX 鼠标X坐标（相对于控件）
+     * @param mouseY 鼠标Y坐标（相对于控件）
+     * @param controlWidth 控件宽度
+     * @param controlHeight 控件高度
+     */
     function updateTimeFromMouse(mouseX, mouseY, controlWidth, controlHeight) {
         const dx = mouseX - controlWidth / 2
         const dy = mouseY - controlHeight / 2

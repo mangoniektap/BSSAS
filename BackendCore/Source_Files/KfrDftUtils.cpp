@@ -1,3 +1,8 @@
+/**
+ * @file KfrDftUtils.cpp
+ * @brief 基于KFR库的DFT/FFT实用工具模块，提供实频谱幅值计算、复频谱正逆变换等功能，内部含加窗、幂次对齐、计划缓存优化。
+ */
+
 #include "KfrDftUtils.h"
 
 #include <kfr/dft.hpp>
@@ -15,6 +20,7 @@ using ComplexPlan = kfr::dft_plan<double>;
 
 constexpr double kPi = 3.14159265358979323846;
 
+/** @brief 计算不小于给定值的下一个2的幂。 */
 int nextPowerOfTwo(int value)
 {
     if (value <= 1) {
@@ -28,11 +34,18 @@ int nextPowerOfTwo(int value)
     return power;
 }
 
+/** @brief 根据采样点数计算实数FFT的尺寸（对齐到2的幂，至少为2）。 */
 int computeRealFftSize(int sampleCount)
 {
     return std::max(2, nextPowerOfTwo(sampleCount));
 }
 
+/**
+ * @brief 构建窗函数系数。
+ * @param sampleCount 采样点数。
+ * @param windowFunction 窗函数类型（矩形窗或汉宁窗）。
+ * @returns 归一化的窗系数向量，矩形窗全部返回1.0。
+ */
 QVector<float> buildWindow(int sampleCount, KfrDftUtils::WindowFunction windowFunction)
 {
     QVector<float> window(sampleCount, 1.0f);
@@ -54,6 +67,11 @@ QVector<float> buildWindow(int sampleCount, KfrDftUtils::WindowFunction windowFu
     return window;
 }
 
+/**
+ * @brief 计算窗函数的相干增益补偿因子。
+ * @param window 输入窗系数。
+ * @returns 补偿因子（相干增益倒数），空窗返回1.0。
+ */
 float windowCompensation(const QVector<float>& window)
 {
     if (window.isEmpty()) {
@@ -73,6 +91,7 @@ float windowCompensation(const QVector<float>& window)
     return static_cast<float>(1.0 / coherentGain);
 }
 
+/** @brief 按尺寸从缓存获取或创建FFT计划（带互斥锁保护）。 */
 template <typename Plan>
 std::shared_ptr<const Plan> acquirePlan(
     int size,
@@ -112,6 +131,13 @@ kfr::u8* tempPointer(std::vector<kfr::u8>& temp)
 
 namespace KfrDftUtils {
 
+/**
+ * @brief 计算实数信号的FFT频谱幅值。
+ * @param samples 输入采样信号。
+ * @param windowFunction 窗函数类型。
+ * @param removeDcOffset 是否先去除直流偏置。
+ * @returns 包含FFT尺寸和归一化幅值谱的结果结构体。
+ */
 RealDftSpectrumResult computeRealSpectrumMagnitudes(
     const QVector<float>& samples,
     WindowFunction windowFunction,
@@ -173,6 +199,11 @@ RealDftSpectrumResult computeRealSpectrumMagnitudes(
     return result;
 }
 
+/**
+ * @brief 计算复值离散傅里叶变换（DFT）。
+ * @param signal 输入实数信号。
+ * @returns 复数频谱向量，长度与输入相同。
+ */
 QVector<std::complex<double>> computeComplexDft(const QVector<float>& signal)
 {
     QVector<std::complex<double>> spectrum(signal.size(), std::complex<double>(0.0, 0.0));
@@ -191,6 +222,11 @@ QVector<std::complex<double>> computeComplexDft(const QVector<float>& signal)
     return spectrum;
 }
 
+/**
+ * @brief 计算复频谱的逆DFT，返回实部信号。
+ * @param spectrum 复数频谱向量。
+ * @returns 重建的实信号，已按频谱长度归一化。
+ */
 QVector<double> computeInverseComplexDftReal(
     const QVector<std::complex<double>>& spectrum)
 {

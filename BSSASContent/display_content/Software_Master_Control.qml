@@ -1,3 +1,7 @@
+/**
+ * @file Software_Master_Control.qml
+ * @brief 软件总控页面。通过标签栏切换 DAQ 主控、信号处理设置、传感器监测与文件管理四个子面板。
+ */
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Controls.Material
@@ -23,19 +27,33 @@ Page {
     ]
     anchors.fill: parent
 
+    /**
+     * @brief 切换到传感器监测（定位）子页面。
+     */
     function openSensorLocalizationPage() {
         control_selection.currentIndex = 2
     }
 
+    /**
+     * @brief 获取当前声源定位管线使用的采样率，不小于 1。
+     * @returns 已配置的采样率值
+     */
     function currentLocalizationSampleRate() {
         return Math.max(1, dataManager.configuredSampleRate)
     }
 
+    /**
+     * @brief 停止声源定位实时管线并关闭声源定位状态。
+     */
     function closeVoiceLocalization() {
         localizationIntestinalSound.stopRealtimePipeline()
         voiceLocalizationEnabled = false
     }
 
+    /**
+     * @brief 应用传感器定位点配置，启动实时定位管线并切回主控页面。
+     * @param points 定位点数组
+     */
     function applyLocalizationAndBack(points) {
         localizationPoints = points
         localizationIntestinalSound.startRealtimePipeline(root.currentLocalizationSampleRate())

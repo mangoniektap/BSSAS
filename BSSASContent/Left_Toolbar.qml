@@ -1,3 +1,7 @@
+/**
+ * @file Left_Toolbar.qml
+ * @brief 左侧导航栏。包含品牌标识、导航选项卡列表和安全认证标识。
+ */
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

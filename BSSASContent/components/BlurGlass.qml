@@ -1,11 +1,15 @@
-﻿import QtQuick
+/**
+ * @file BlurGlass.qml
+ * @brief 模糊玻璃效果容器组件，提供背景模糊、拖拽和内容承载功能。
+ */
+import QtQuick
 import QtQuick.Effects
 import BSSAS
 
 Item {
     id: root
 
-    // Public Properties
+    /** 公共属性 */
     property Item blurSource
     property real blurAmount: 1
     property bool dragable: false
@@ -25,7 +29,7 @@ Item {
     width: 300
     height: 200
 
-    // Drag Functionality
+    /** 拖拽功能 */
     MouseArea {
         anchors.fill: parent
         drag.target: root
@@ -33,7 +37,7 @@ Item {
         enabled: root.dragable
     }
 
-    // Capture Background Content
+    /** 捕获背景内容 */
     ShaderEffectSource {
         id: effectSource
         anchors.fill: parent
@@ -48,7 +52,7 @@ Item {
         opacity: 0
     }
 
-    // Create Mask
+    /** 创建遮罩 */
     Item {
         id: maskItem
         anchors.fill: parent
@@ -62,7 +66,7 @@ Item {
             color: Theme.textWhite  // Must be opaque, otherwise mask won't work
         }
     }
-    // Enable Mask
+    /** 启用遮罩效果 */
     MultiEffect {
         anchors.fill: effectSource
         source: effectSource
@@ -74,7 +78,7 @@ Item {
         maskSource: maskItem
     }
 
-    // Overlay Theme Color, avoid being too bright/transparent
+    /** 叠加主题色，避免过亮或过透明 */
     Rectangle {
         anchors.fill: parent
         radius: root.borderRadius
@@ -85,7 +89,7 @@ Item {
         border.width: root.borderWidth
     }
 
-    // Content Container
+    /** 内容容器 */
     Item {
         id: contentItem
         anchors.fill: parent

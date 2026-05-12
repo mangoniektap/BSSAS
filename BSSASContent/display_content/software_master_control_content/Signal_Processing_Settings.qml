@@ -1,4 +1,8 @@
-﻿import QtQuick
+﻿/**
+ * @file Signal_Processing_Settings.qml
+ * @brief 信号处理设置页面。配置降噪方式、增益调节、分析时间长度、滤波器类型及实时采集处理算法开关。
+ */
+import QtQuick
 import QtQuick.Controls
 import QtQuick.Effects
 import QtQuick.Layouts
@@ -9,15 +13,31 @@ import BSSASSettingsStorage
 Item {
     id: root
 
+    /**
+     * @brief 为源颜色叠加 alpha 通道值，返回新的 rgba 颜色。
+     * @param sourceColor 源颜色
+     * @param alphaValue alpha 值 [0,1]
+     * @returns 带 alpha 的 Qt.rgba 颜色值
+     */
     function colorWithAlpha(sourceColor, alphaValue) {
         const color = Qt.color(sourceColor)
         return Qt.rgba(color.r, color.g, color.b, alphaValue)
     }
 
+    /**
+     * @brief 将实时增益值限制在 [0.5, 5.0] 范围内。
+     * @param value 增益值
+     * @returns 夹紧后的增益值
+     */
     function clampRealtimeGain(value) {
         return Math.max(0.5, Math.min(5.0, value))
     }
 
+    /**
+     * @brief 将存储的增益值（百分比制）转换为实时增益值并夹紧。
+     * @param value 存储的增益值（百分比制，如 100 = 1.0x）
+     * @returns 夹紧后的实时增益值
+     */
     function storedGainToRealtimeGain(value) {
         return root.clampRealtimeGain(value / 100.0)
     }
@@ -37,6 +57,11 @@ Item {
         qsTr("\u540c\u9891\u6bb5\u8fd0\u52a8\u4f2a\u5f71\u6d88\u9664")
     ]
 
+    /**
+     * @brief 切换指定实时处理算法的启用状态。
+     * @param index 处理算法索引（0-6 对应带通/陷波/主动降噪/自适应降噪/小波降噪/瞬态噪声抑制/运动伪影消除）
+     * @param enabledValue 显式目标状态，未传入则取反
+     */
     function toggleRealtimeProcessing(index, enabledValue) {
         const hasExplicitValue = enabledValue !== undefined
         switch (index) {
@@ -66,6 +91,11 @@ Item {
         }
     }
 
+    /**
+     * @brief 获取指定实时处理算法的当前启用状态。
+     * @param index 处理算法索引（0-6）
+     * @returns 启用返回 true，否则返回 false
+     */
     function realtimeProcessingStateAt(index) {
         switch (index) {
         case 0:
@@ -87,6 +117,10 @@ Item {
         }
     }
 
+    /**
+     * @brief 批量设置所有实时处理算法的启用状态。
+     * @param enabledValue 目标启用状态
+     */
     function setAllRealtimeProcessing(enabledValue) {
         signalPreprocessing.setAllRealtimeProcessingEnabled(!!enabledValue)
     }

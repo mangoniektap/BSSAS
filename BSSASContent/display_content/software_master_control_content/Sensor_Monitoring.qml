@@ -1,4 +1,8 @@
-﻿pragma ComponentBehavior: Bound
+﻿/**
+ * @file Sensor_Monitoring.qml
+ * @brief 传感器监测页面。在归一化腹部坐标系中配置传感器解剖位置，支持坐标微调与批量重置。
+ */
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -20,19 +24,42 @@ Item {
     readonly property real wheelStep: 0.01
     readonly property int pointRowSpacing: 8
 
+    /**
+     * @brief 为源颜色叠加 alpha 通道值，返回新的 rgba 颜色。
+     * @param sourceColor 源颜色
+     * @param alphaValue alpha 值 [0,1]
+     * @returns 带 alpha 的 Qt.rgba 颜色值
+     */
     function colorWithAlpha(sourceColor, alphaValue) {
         const c = Qt.color(sourceColor)
         return Qt.rgba(c.r, c.g, c.b, alphaValue)
     }
 
+    /**
+     * @brief 将值限制在最小与最大值之间。
+     * @param value 输入值
+     * @param minimumValue 最小值
+     * @param maximumValue 最大值
+     * @returns 夹紧后的值
+     */
     function clamp(value, minimumValue, maximumValue) {
         return Math.max(minimumValue, Math.min(maximumValue, value))
     }
 
+    /**
+     * @brief 将数值转换为保留两位小数的字符串。
+     * @param value 数值
+     * @returns 两位小数字符串
+     */
     function toFixedString(value) {
         return Number(value).toFixed(2)
     }
 
+    /**
+     * @brief 将数字 1-10 转换为中文小写数字（一二三...），超出范围返回原字符串。
+     * @param value 输入数字
+     * @returns 中文数字字符串
+     */
     function toChineseNumber(value) {
         const numbers = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十"]
         const n = Number(value)
@@ -42,6 +69,12 @@ Item {
         return String(value)
     }
 
+    /**
+     * @brief 将通道标识符（如 CH1）转换为中文显示名（如 通道一）。
+     * @param channelText 通道标识文本
+     * @param pointIndex 定位点索引（回退使用）
+     * @returns 中文通道名称
+     */
     function displayChannel(channelText, pointIndex) {
         const source = channelText ? String(channelText) : ("CH" + (pointIndex + 1))
         const matched = /^CH(\d+)$/i.exec(source)
@@ -51,12 +84,22 @@ Item {
         return source
     }
 
+    /**
+     * @brief 从解剖标签中提取括号内的简称，如 "回盲部-最核心区" 保持不变；若无括号则返回原值。
+     * @param labelText 原始解剖标签
+     * @returns 提取后的解剖简称
+     */
     function anatomicalLabel(labelText) {
         const source = labelText ? String(labelText) : ""
         const matched = /^[^（）()]+[（(]([^（）()]+)[）)]$/.exec(source)
         return matched && matched.length > 1 ? matched[1] : source
     }
 
+    /**
+     * @brief 深拷贝定位点数组，缺失或无效字段用默认值填充并夹紧坐标范围。
+     * @param sourcePoints 源定位点数组
+     * @returns 合法化的定位点数组
+     */
     function copyPoints(sourcePoints) {
         const defaults = root.defaultPoints()
         const target = []
@@ -85,6 +128,10 @@ Item {
         return target
     }
 
+    /**
+     * @brief 返回七个传感器的默认解剖定位点（回盲部、膀胱上方/小肠下段、乙状结肠等）。
+     * @returns 默认定位点数组
+     */
     function defaultPoints() {
         return [
             ({ channel: "CH1", label: "回盲部-最核心区", x: 0.52, y: 0.28 }),
@@ -97,6 +144,12 @@ Item {
         ]
     }
 
+    /**
+     * @brief 更新指定索引定位点的 (x, y) 坐标并夹紧至合法范围。
+     * @param index 定位点索引
+     * @param xValue 新的 x 坐标 [-1,1]
+     * @param yValue 新的 y 坐标 [0,1]
+     */
     function updatePoint(index, xValue, yValue) {
         const nextPoints = root.copyPoints(root.workingPoints)
         if (index < 0 || index >= nextPoints.length) {
@@ -108,6 +161,12 @@ Item {
         root.workingPoints = nextPoints
     }
 
+    /**
+     * @brief 微调指定定位点的 x 或 y 坐标，方向正值增大、负值减小，步长为 wheelStep。
+     * @param index 定位点索引
+     * @param adjustX 是否调整 x 轴（否则调整 y 轴）
+     * @param direction 调整方向：1 增大，-1 减小，0 不调整
+     */
     function adjustPointAxis(index, adjustX, direction) {
         const point = root.workingPoints && index >= 0 && index < root.workingPoints.length
             ? root.workingPoints[index]
@@ -127,21 +186,40 @@ Item {
         }
     }
 
+    /**
+     * @brief 选中指定定位点的坐标字段（x 或 y）用于滚轮微调。
+     * @param index 定位点索引
+     * @param adjustX 是否选中 x 轴字段
+     */
     function selectField(index, adjustX) {
         root.selectedPointIndex = index
         root.selectedAdjustX = adjustX
     }
 
+    /**
+     * @brief 判断指定定位点的坐标字段是否当前选中。
+     * @param index 定位点索引
+     * @param adjustX 是否查询 x 轴字段
+     * @returns 是否选中
+     */
     function isFieldSelected(index, adjustX) {
         return root.selectedPointIndex === index && root.selectedAdjustX === adjustX
     }
 
+    /**
+     * @brief 重置所有定位点到默认值并清除选中状态。
+     */
     function resetToDefaults() {
         root.workingPoints = root.copyPoints(root.defaultPoints())
         root.selectedPointIndex = -1
         root.selectedAdjustX = true
     }
 
+    /**
+     * @brief 从滚轮事件中提取纵向滚动增量（优先 angleDelta.y，其次 pixelDelta.y）。
+     * @param event 滚轮事件对象
+     * @returns 纵向滚动增量，无有效值返回 0
+     */
     function wheelDeltaFromEvent(event) {
         if (event && event.angleDelta && event.angleDelta.y !== undefined && event.angleDelta.y !== 0) {
             return Number(event.angleDelta.y)
@@ -152,6 +230,9 @@ Item {
         return 0
     }
 
+    /**
+     * @brief 传感器坐标值显示字段组件，只读展示 x 或 y 坐标值并高亮当前选中的字段。
+     */
     component SensorValueField : TextFields {
         id: control
         property real value: 0
@@ -187,6 +268,9 @@ Item {
         text: root.toFixedString(control.value)
     }
 
+    /**
+     * @brief 提交当前定位点配置并通过回调切回主控页面。
+     */
     function commitAndBack() {
         if (typeof root.applyLocalizationAndBack === "function") {
             root.applyLocalizationAndBack(root.copyPoints(root.workingPoints))

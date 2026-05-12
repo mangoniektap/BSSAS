@@ -1,4 +1,8 @@
-﻿#ifndef MULTI_FEATUREJOINTDETECTION_H
+﻿/** @file Multi_featureJointDetection.h
+ *  @brief 多特征联合检测模块，基于短时能量、频域分布、过零率等多维度特征进行信号端点检测与分析。
+ */
+
+#ifndef MULTI_FEATUREJOINTDETECTION_H
 #define MULTI_FEATUREJOINTDETECTION_H
 
 #include <QCoreApplication>
@@ -12,12 +16,20 @@
 
 class QThread;
 
+/** @brief 特征检测算法类，提供信号分帧、多特征提取及三阶段端点检测功能。 */
 class FeatureDetectionAlgorithm
 {
 public:
     FeatureDetectionAlgorithm() = default;
 
-    // Preserve the original detector configuration entry points.
+    /**
+     * @brief 构造特征检测算法并配置基本参数。
+     * @param sampleRate     输入信号的采样率 (Hz)
+     * @param frameLengthMs  帧长 (ms)，默认 30.0
+     * @param frameShiftMs   帧移 (ms)，默认 15.0
+     * @param maxSilenceMs   最大静音段 (ms)，默认 200.0
+     * @param thresholdT     ZCR 阈值参数，默认 0.01
+     */
     FeatureDetectionAlgorithm(
         int sampleRate,
         double frameLengthMs = 30.0,
@@ -25,8 +37,13 @@ public:
         double maxSilenceMs = 200.0,
         double thresholdT = 0.01);
 
+    /** @brief 手动设置检测阈值。 @param steTh 短时能量阈值 @param zcrTh 过零率阈值 @param fdTh 频域分布阈值 */
     void setThresholds(double steTh, double zcrTh, double fdTh);
+
+    /** @brief 对原始信号执行端点检测。 @param rawSignal 原始信号数据 @returns 检测到的语音段起止索引对列表 */
     QVector<QPair<int, int>> detect(const QVector<double>& rawSignal);
+
+    /** @brief 对原始信号进行多特征分析。 @param rawSignal 原始信号数据 @returns 包含各维度特征值的 QVariantMap */
     QVariantMap analyze(const QVector<double>& rawSignal);
 
 private:
@@ -94,10 +111,19 @@ private:
     QVector<bool> m_candidateMask;
 };
 
+/** @brief 多特征联合检测工作线程，读取临时文件执行单次分析并回传结果。 */
 class MultiFeatureJointDetectionWorker : public QObject
 {
     Q_OBJECT
 public:
+    /**
+     * @brief 构造工作线程。
+     * @param thresholdsConfigured 是否已配置阈值
+     * @param steThreshold        短时能量阈值
+     * @param zcrThreshold        过零率阈值
+     * @param fdThreshold         频域分布阈值
+     * @param parent              父对象
+     */
     explicit MultiFeatureJointDetectionWorker(
         bool thresholdsConfigured,
         double steThreshold,
@@ -107,12 +133,18 @@ public:
     ~MultiFeatureJointDetectionWorker() override;
 
 public slots:
-    // One-shot worker: read the temp file, analyze it, then write features back.
+    /**
+     * @brief 一次性工作流程：读取临时文件，执行多特征分析，写回特征结果。
+     * @param temporaryFilePath 临时文件路径
+     */
     void analyzeImportedTemporaryFile(const QString& temporaryFilePath);
 
 signals:
+    /** @brief 分析完成信号 @param featureValues 特征值映射 */
     void analysisCompleted(const QVariantMap& featureValues);
+    /** @brief 分析失败信号 @param errorMessage 错误消息 */
     void analysisFailed(const QString& errorMessage);
+    /** @brief 工作线程结束信号 */
     void finished();
 
 private:
@@ -122,10 +154,13 @@ private:
     double m_fdThreshold = 0.0;
 };
 
+/** @brief 多特征联合检测管理器 (单例)，协调工作线程生命周期并向 QML 暴露接口。 */
 class Multi_featureJointDetection : public QObject
 {
     Q_OBJECT
+    /** @brief 是否正处于分析忙碌状态 */
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
+    /** @brief 导入数据的特征分析结果 */
     Q_PROPERTY(QVariantMap importedFeatureValues READ importedFeatureValues NOTIFY importedFeatureValuesChanged)
 
 public:
@@ -141,30 +176,48 @@ public:
         return m_instance;
     }
 
+    /** @brief 启动对导入数据的多特征分析 */
     Q_INVOKABLE void startImportedAnalysis();
+    /**
+     * @brief 设置检测阈值。
+     * @param steTh 短时能量阈值
+     * @param zcrTh 过零率阈值
+     * @param fdTh  频域分布阈值
+     */
     Q_INVOKABLE void setThresholds(double steTh, double zcrTh, double fdTh);
 
+    /** @brief 是否忙碌 @returns 忙碌状态 */
     bool busy() const;
+    /** @brief 获取导入特征值 @returns 特征值映射 */
     QVariantMap importedFeatureValues() const;
 
 signals:
+    /** @brief 导入分析完成信号 @param featureValues 特征值映射 */
     void importedAnalysisCompleted(const QVariantMap& featureValues);
+    /** @brief 导入分析失败信号 @param errorMessage 错误消息 */
     void importedAnalysisFailed(const QString& errorMessage);
+    /** @brief 忙碌状态变化信号 */
     void busyChanged();
+    /** @brief 导入特征值变化信号 */
     void importedFeatureValuesChanged();
 
 private slots:
+    /** @brief 处理导入数据就绪 */
     void handleImportedDataReady();
+    /** @brief 处理工作线程分析完成 @param featureValues 特征值映射 */
     void handleWorkerCompleted(const QVariantMap& featureValues);
+    /** @brief 处理工作线程分析失败 @param errorMessage 错误消息 */
     void handleWorkerFailed(const QString& errorMessage);
+    /** @brief 处理工作线程结束 */
     void handleWorkerFinished();
 
 private:
     explicit Multi_featureJointDetection(QObject* parent = nullptr);
     ~Multi_featureJointDetection() override;
 
-    // Keep the QML-facing instance alive, and spin up a fresh worker thread per run.
+    /** @brief 尝试启动导入分析，为每次运行创建新的工作线程 */
     void tryStartImportedAnalysis();
+    /** @brief 设置忙碌状态 @param busy 是否忙碌 */
     void setBusy(bool busy);
 
     static Multi_featureJointDetection* m_instance;
@@ -176,7 +229,7 @@ private:
     double m_steThreshold = 0.0;
     double m_zcrThreshold = 0.0;
     double m_fdThreshold = 0.0;
-    QThread* m_workerThread = nullptr;
+    QThread* m_workerThread = nullptr;  /**< 当前活跃的工作线程 */
 };
 
 #endif // MULTI_FEATUREJOINTDETECTION_H

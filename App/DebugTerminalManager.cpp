@@ -1,3 +1,8 @@
+/** @file DebugTerminalManager.cpp
+ *  @brief 调试终端管理器实现。提供原生 Windows 控制台窗口的创建/管理、Qt 消息拦截与重定向、
+ *         终端命令解析（如 ANC/ANR 算法日志开关、通道配置保存）、控制台输入线程及暗色主题渲染。
+ */
+
 #include "DebugTerminalManager.h"
 
 #include "ActiveNoiseCancellation.h"
@@ -28,6 +33,11 @@
 #endif
 
 namespace {
+/** @brief 将 "on"/"off" 字符串解析为布尔值。
+ *  @param token 输入字符串
+ *  @param enabled 输出布尔值
+ *  @returns 匹配成功返回 true
+ */
 bool parseOnOffToken(const QString& token, bool& enabled)
 {
     if (token.compare(QStringLiteral("on"), Qt::CaseInsensitive) == 0) {
@@ -117,6 +127,9 @@ bool qtWindowRect(QWindow* window, RECT* windowRect)
     return true;
 }
 
+/** @brief 查找当前处于前台的 QML 应用程序主窗口的屏幕矩形区域。
+ *  @returns 窗口矩形，若未找到则返回空矩形
+ */
 RECT applicationWindowRect()
 {
     RECT focusedRect = {};

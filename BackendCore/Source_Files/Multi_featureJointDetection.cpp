@@ -1,4 +1,9 @@
-﻿#include "Multi_featureJointDetection.h"
+﻿/**
+ * @file Multi_featureJointDetection.cpp
+ * @brief 多特征联合肠鸣音检测模块，基于短时能量（STE）、过零率（ZCR）和分形维度（FD）三特征门控筛选候选片段，再通过24维频谱/倒谱/小波域融合评分实现鲁棒肠鸣音事件识别与分类。
+ */
+
+#include "Multi_featureJointDetection.h"
 
 #include "DataManager.h"
 #include "FractalDimensionUtils.h"
@@ -1159,6 +1164,11 @@ void FeatureDetectionAlgorithm::setThresholds(
     m_thresholdsSet = true;
 }
 
+/**
+ * @brief 基于三特征阈值对信号进行候选肠鸣音片段检测。
+ * @param rawSignal 输入原始信号。
+ * @returns 候选片段的[startSample, endSample]索引对列表。
+ */
 QVector<QPair<int, int>> FeatureDetectionAlgorithm::detect(
     const QVector<double>& rawSignal)
 {
@@ -1175,6 +1185,11 @@ QVector<QPair<int, int>> FeatureDetectionAlgorithm::detect(
     return detectByThreeStage(steVec, zcrVec, fdVec, m_frameShiftSamples);
 }
 
+/**
+ * @brief 对原始信号执行完整特征提取、候选检测与识别评分，返回完整特征字典。
+ * @param rawSignal 原始双精度信号。
+ * @returns 包含所有帧级特征、候选片段和识别结果详情的QVariantMap。
+ */
 QVariantMap FeatureDetectionAlgorithm::analyze(const QVector<double>& rawSignal)
 {
     QVariantMap featureValues = buildDefaultFeatureValues();
@@ -1313,6 +1328,13 @@ QVector<QVector<double>> FeatureDetectionAlgorithm::frameSignal(
     return frames;
 }
 
+/**
+ * @brief 从分帧信号中提取完整的24维特征集：STE、ZCR、FD、对数能量、包络、瞬态强度、峰度、子带能量比、频谱形状、多尺度小波能量、Log-Mel统计量等。
+ * @param frames 输入分帧信号。
+ * @param steVec 输出短时能量向量。
+ * @param fdVec 输出分形维度向量。
+ * @param zcrVec 输出过零率向量。
+ */
 void FeatureDetectionAlgorithm::extractFeatures(
     const QVector<QVector<double>>& frames,
     QVector<double>& steVec,
@@ -1663,6 +1685,14 @@ void FeatureDetectionAlgorithm::estimateAdaptiveThresholds(
             << "entropyUpper:" << m_entropyUpperBound;
 }
 
+/**
+ * @brief 三阶段状态机检测：逐帧评分 -> 候选掩码 -> 静音容忍合并为连续片段。
+ * @param ste 短时能量向量。
+ * @param zcr 过零率向量。
+ * @param fd 分形维度向量。
+ * @param frameShiftSamples 帧移采样点数。
+ * @returns 检测到的候选肠鸣音片段列表。
+ */
 QVector<QPair<int, int>> FeatureDetectionAlgorithm::detectByThreeStage(
     const QVector<double>& ste,
     const QVector<double>& zcr,
@@ -1838,6 +1868,10 @@ MultiFeatureJointDetectionWorker::MultiFeatureJointDetectionWorker(
 
 MultiFeatureJointDetectionWorker::~MultiFeatureJointDetectionWorker() = default;
 
+/**
+ * @brief 从导入的临时文件读取信号并执行完整的特征分析与识别流程。
+ * @param temporaryFilePath 临时FLOAT缓存文件路径。
+ */
 void MultiFeatureJointDetectionWorker::analyzeImportedTemporaryFile(
     const QString& temporaryFilePath)
 {
@@ -1970,6 +2004,9 @@ void Multi_featureJointDetection::handleWorkerFinished()
     tryStartImportedAnalysis();
 }
 
+/**
+ * @brief 尝试启动导入数据分析：检查临时文件就绪状态，若满足条件则创建工作线程执行特征提取与识别。
+ */
 void Multi_featureJointDetection::tryStartImportedAnalysis()
 {
     const QString temporaryFilePath =

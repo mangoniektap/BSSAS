@@ -1,4 +1,8 @@
-﻿import QtQuick
+/**
+ * @file CheckBoxes.qml
+ * @brief 自定义复选框组件，支持选中、未选中和半选状态，带有状态层动画效果。
+ */
+import QtQuick
 import QtQuick.Layouts
 import BSSAS
 
@@ -18,11 +22,22 @@ Item {
 
     signal clicked()
 
+    /**
+     * @brief 为颜色附加透明度
+     * @param sourceColor 源颜色值
+     * @param alphaValue 透明度 (0~1)
+     * @returns 附加透明度的新颜色
+     */
     function colorWithAlpha(sourceColor, alphaValue) {
         const color = Qt.color(sourceColor)
         return Qt.rgba(color.r, color.g, color.b, alphaValue)
     }
 
+    /**
+     * @brief 切换复选框选中状态
+     * @details 仅当 enabled 且 interactive 为 true 时生效。
+     *          切换后取消半选状态并触发 clicked 信号。
+     */
     function toggle() {
         if (!enabled || !interactive) {
             return

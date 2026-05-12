@@ -1,3 +1,7 @@
+/**
+ * @file ProgressIndicator.qml
+ * @brief 进度指示器组件，支持确定性线性、不确定性线性和波浪形三种进度显示样式。
+ */
 import QtQuick
 import BSSAS
 
@@ -11,7 +15,7 @@ Item {
     implicitWidth: 200
     implicitHeight: wavy ? 16 : 4
     
-    // Standard Linear Progress
+    /** 标准线性进度条 */
     Rectangle {
         id: track
         anchors.fill: parent
@@ -20,7 +24,7 @@ Item {
         radius: height / 2
         clip: true
         
-        // Determinate Indicator
+        /** 确定性进度指示器 */
         Rectangle {
             visible: !root.indeterminate
             height: parent.height
@@ -33,12 +37,12 @@ Item {
             }
         }
         
-        // Indeterminate Indicator
+        /** 不确定性进度指示器 */
         Item {
             anchors.fill: parent
             visible: root.indeterminate
             
-            // First bar
+            /** 第一进度条 */
             Rectangle {
                 id: bar1
                 height: parent.height
@@ -59,7 +63,7 @@ Item {
                 }
             }
             
-            // Second bar (delayed)
+            /** 第二进度条（延迟启动） */
             Rectangle {
                 id: bar2
                 height: parent.height
@@ -84,7 +88,7 @@ Item {
         }
     }
 
-    // Wavy Linear Progress
+    /** 波浪形进度条 */
     Canvas {
         id: wavyCanvas
         visible: root.wavy
@@ -95,12 +99,12 @@ Item {
 
         property real phase: 0.0
 
-        // Animation for phase shift (make it flow)
+        /** 相位偏移动画（产生流动效果） */
         NumberAnimation on phase {
             running: root.wavy && root.visible && root.indeterminate
             from: 0
             to: Math.PI * 2
-            duration: 1000 // 1Hz wave frequency
+            duration: 1000 /** 1Hz 波动频率 */
             loops: Animation.Infinite
         }
 
@@ -111,24 +115,24 @@ Item {
             var w = width;
             var h = height;
             var cy = h / 2;
-            var amplitude = h / 4; // Wave height
-            var frequency = 0.1; // Wave density
+            var amplitude = h / 4; /** 波幅高度 */
+            var frequency = 0.1; /** 波形密度 */
             
             ctx.lineWidth = 4;
             ctx.lineCap = "round";
             ctx.lineJoin = "round";
             
-            // Draw Track (Inactive)
+            /** 绘制轨道（非活跃部分） */
             ctx.beginPath();
             ctx.strokeStyle = Theme.pageBg;
             for (var x = 0; x <= w; x+=2) {
-                var y = cy + amplitude * Math.sin((x * frequency) + phase); // Track also waves
+                var y = cy + amplitude * Math.sin((x * frequency) + phase); /** 轨道也跟随波动 */
                 if (x === 0) ctx.moveTo(x, y);
                 else ctx.lineTo(x, y);
             }
             ctx.stroke();
 
-            // Draw Indicator (Active)
+            /** 绘制指示器（活跃部分） */
             ctx.beginPath();
             ctx.strokeStyle = Theme.primary;
             
@@ -140,11 +144,11 @@ Item {
             }
 
             if (root.indeterminate) {
-                // Active Wave (Indeterminate)
+                /** 活跃波浪（不确定性模式） */
                 ctx.beginPath();
                 ctx.strokeStyle = Theme.primary;
                 
-                var progress = (phase % (Math.PI * 2)) / (Math.PI * 2); // 0 to 1
+                var progress = (phase % (Math.PI * 2)) / (Math.PI * 2); /** 0 到 1 */
                 var barWidth = w * 0.5;
                 var startX = (w + barWidth) * progress - barWidth;
                 var actualEndX = startX + barWidth;
@@ -158,7 +162,7 @@ Item {
                 }
                 ctx.stroke();
             } else {
-                // Determinate
+                /** 确定性模式 */
                 for (var x = 0; x <= endX; x+=2) {
                     var y = cy + amplitude * Math.sin((x * frequency) + phase);
                     if (x === 0) ctx.moveTo(x, y);

@@ -1,3 +1,7 @@
+/**
+ * @file App.qml
+ * @brief 主窗口入口。管理无边框窗口、全局拖拽、设置侧栏以及子控件的布局与信号分发。
+ */
 import QtQuick
 import QtQuick.Controls
 import BSSAS

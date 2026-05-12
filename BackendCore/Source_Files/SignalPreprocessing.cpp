@@ -1,3 +1,8 @@
+/**
+ * @file SignalPreprocessing.cpp
+ * @brief 信号预处理管道模块，整合IIR带通/陷波滤波、主动噪声消除（ANC）、自适应降噪、小波去噪、瞬态噪声抑制、运动伪迹削减和实时增益控制，支持导入离线批处理和实时流式多通道处理。
+ */
+
 #include "SignalPreprocessing.h"
 
 #include "AdaptiveDownsampling.h"
@@ -21,7 +26,10 @@ constexpr double kLowCutoffHz = 20.0;
 constexpr double kHighCutoffHz = 2000.0;
 constexpr double kPowerlineFundamentalHz = 50.0;
 constexpr double kPowerlineSecondHarmonicHz = 100.0;
-constexpr double kNotchQFactor = 30.0;
+constexpr double kPowerlineThirdHarmonicHz = 150.0;
+constexpr double kPowerlineFundamentalQFactor = 25.0;
+constexpr double kPowerlineSecondHarmonicQFactor = 50.0;
+constexpr double kPowerlineThirdHarmonicQFactor = 75.0;
 constexpr double kMinimumCutoffGapHz = 1.0;
 constexpr double kMinimumRealtimeGain = 0.5;
 constexpr double kMaximumRealtimeGain = 5.0;
@@ -30,7 +38,7 @@ constexpr int kRealtimeChannelCount = 7;
 constexpr int kRealtimeReferenceNoiseChannel = 7;
 constexpr int kAncDebugLogEveryFrames = 10;
 constexpr double kMinimumRmsForDb = 1e-12;
-constexpr size_t kPreFilterSectionCount = 4;
+constexpr size_t kPreFilterSectionCount = 5;
 
 struct PreFilterDesign
 {
@@ -42,9 +50,9 @@ struct PreFilterDesign
         return sectionCount > 0;
     }
 
-    kfr::iir_params<double, 4> params() const
+    kfr::iir_params<double, 5> params() const
     {
-        return kfr::iir_params<double, 4>{ sections.data(), sectionCount };
+        return kfr::iir_params<double, 5>{ sections.data(), sectionCount };
     }
 };
 
@@ -68,6 +76,7 @@ void appendPowerlineNotchSection(
     std::array<kfr::biquad_section<double>, kPreFilterSectionCount>& sections,
     size_t& sectionCount,
     double centerFrequencyHz,
+    double qFactor,
     double sampleRateHz)
 {
     if (sectionCount >= sections.size()) {
@@ -75,7 +84,7 @@ void appendPowerlineNotchSection(
     }
 
     const double normalizedFrequency = centerFrequencyHz / sampleRateHz;
-    sections[sectionCount++] = kfr::biquad_notch(normalizedFrequency, kNotchQFactor);
+    sections[sectionCount++] = kfr::biquad_notch(normalizedFrequency, qFactor);
 }
 
 PreFilterDesign makePreFilterDesign(
@@ -107,6 +116,7 @@ PreFilterDesign makePreFilterDesign(
             design.sections,
             design.sectionCount,
             kPowerlineFundamentalHz,
+            kPowerlineFundamentalQFactor,
             sampleRateHz);
     }
 
@@ -116,6 +126,17 @@ PreFilterDesign makePreFilterDesign(
             design.sections,
             design.sectionCount,
             kPowerlineSecondHarmonicHz,
+            kPowerlineSecondHarmonicQFactor,
+            sampleRateHz);
+    }
+
+    if (options.notchEnabled &&
+        isFrequencyWithinNyquist(kPowerlineThirdHarmonicHz + kMinimumCutoffGapHz, sampleRate)) {
+        appendPowerlineNotchSection(
+            design.sections,
+            design.sectionCount,
+            kPowerlineThirdHarmonicHz,
+            kPowerlineThirdHarmonicQFactor,
             sampleRateHz);
     }
 
@@ -124,7 +145,7 @@ PreFilterDesign makePreFilterDesign(
 
 QVector<float> applyIirPreFilter(
     const QVector<float>& rawData,
-    kfr::iir_state<double, 4>& filterState)
+    kfr::iir_state<double, 5>& filterState)
 {
     if (rawData.isEmpty()) {
         return {};
@@ -158,7 +179,7 @@ QVector<float> applyPreFilterDesign(
         return rawData;
     }
 
-    kfr::iir_state<double, 4> filterState{ design.params() };
+    kfr::iir_state<double, 5> filterState{ design.params() };
     return applyIirPreFilter(rawData, filterState);
 }
 
@@ -166,7 +187,7 @@ QVector<float> applyRealtimePreFilter(
     const QVector<float>& rawData,
     int sampleRate,
     const SignalPreprocessOptions& options,
-    kfr::iir_state<double, 4>* filterState = nullptr,
+    kfr::iir_state<double, 5>* filterState = nullptr,
     bool hasFilterState = false)
 {
     if (rawData.isEmpty()) {
@@ -182,7 +203,7 @@ QVector<float> applyRealtimePreFilter(
         return applyIirPreFilter(rawData, *filterState);
     }
 
-    kfr::iir_state<double, 4> temporaryState{ preFilterDesign.params() };
+    kfr::iir_state<double, 5> temporaryState{ preFilterDesign.params() };
     return applyIirPreFilter(rawData, temporaryState);
 }
 
@@ -274,7 +295,7 @@ QVector<float> runRealtimePreprocessPipeline(
     const SignalPreprocessOptions& options,
     const QVector<float>* referenceNoise = nullptr,
     ActiveNoiseCancellation::StreamingState* ancStreamingState = nullptr,
-    kfr::iir_state<double, 4>* filterState = nullptr,
+    kfr::iir_state<double, 5>* filterState = nullptr,
     bool hasFilterState = false,
     AdaptiveNoiseReduction::StreamingState* adaptiveStreamingState = nullptr)
 {
@@ -848,6 +869,7 @@ void SignalPreprocessing::setRealtimeGain(double gain)
     emit realtimeGainChanged();
 }
 
+/** @brief 启动实时预处理定时器，开始周期性从DAQ设备读取数据并处理。 */
 void SignalPreprocessing::startPreprocessing()
 {
     const int processingSession = ++m_processingSession;
@@ -913,6 +935,12 @@ QVector<float> SignalPreprocessing::getDataCache() const
     return m_preprocessedDataCache;
 }
 
+/**
+ * @brief 对导入信号执行完整预处理管道：带通滤波、陷波、自适应降噪、小波去噪、瞬态抑制和运动伪迹削减。
+ * @param samplingRate 信号采样率（Hz）。
+ * @param rawData 原始浮点信号。
+ * @returns 预处理后的信号。
+ */
 QVector<float> SignalPreprocessing::filterDataImport(
     int samplingRate,
     const QVector<float>& rawData)
@@ -1097,10 +1125,10 @@ void PreprocessingWorker::initPreFilter(
     m_hasPreFilterState = design.hasSections();
     for (RealtimePreFilterState& channelState : m_preFilterStates) {
         if (m_hasPreFilterState) {
-            channelState.state = kfr::iir_state<double, 4>{ design.params() };
+            channelState.state = kfr::iir_state<double, 5>{ design.params() };
         } else {
             channelState.state =
-                kfr::iir_state<double, 4>{ kfr::iir_params<double, 4>() };
+                kfr::iir_state<double, 5>{ kfr::iir_params<double, 5>() };
         }
     }
 }
@@ -1117,6 +1145,9 @@ void PreprocessingWorker::updateProcessingSession(int session)
     m_processingSession = session;
 }
 
+/**
+ * @brief 定时执行实时预处理：从DAQ设备拉取各通道数据，依次通过预滤波器、ANC和自适应降噪，写入缓存并通知主线程。
+ */
 void PreprocessingWorker::processing()
 {
     int selectedChannel = 0;

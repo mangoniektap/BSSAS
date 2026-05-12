@@ -1,3 +1,7 @@
+/**
+ * @file DirectionAwareHoverCard.qml
+ * @brief 方向感知悬停卡片组件，根据鼠标位置产生 3D 旋转倾斜效果。
+ */
 import QtQuick
 import BSSAS
 
@@ -67,6 +71,11 @@ Item {
         onPositionChanged: function(mouse) { updateRotation(mouse.x, mouse.y) }
         onExited: resetRotation()
 
+        /**
+         * @brief 根据鼠标位置更新卡片旋转角度
+         * @param x 鼠标相对于卡片的 X 坐标
+         * @param y 鼠标相对于卡片的 Y 坐标
+         */
         function updateRotation(x, y) {
             const centerX = root.width / 2
             const centerY = root.height / 2
@@ -78,6 +87,9 @@ Item {
             root.rotationX = -root.maxRotationAngle * dy / centerY
         }
 
+        /**
+         * @brief 重置卡片旋转角度为 0
+         */
         function resetRotation() {
             root.rotationX = 0
             root.rotationY = 0

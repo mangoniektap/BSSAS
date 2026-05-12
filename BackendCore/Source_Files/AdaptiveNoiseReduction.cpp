@@ -1,3 +1,9 @@
+/** @file AdaptiveNoiseReduction.cpp
+ *  @brief 自适应降噪 (ANR) 算法实现。基于短时傅里叶变换 (STFT) 和 MMSE 谱减法，
+ *         结合最小谱跟踪噪声估计、语音存在概率估计、自适应先验 SNR 平滑（基于谱熵的 Z-score 驱动）
+ *         以及重叠相加 (OLA) 合成，对音频信号进行单通道降噪处理。
+ */
+
 #include "AdaptiveNoiseReduction.h"
 
 #include "DataManager.h"
@@ -124,6 +130,11 @@ QVector<double> buildSqrtHannWindow(int frameLength)
     return window;
 }
 
+/** @brief 计算指数积分 E1(x) = integral_t=x..inf exp(-t)/t dt。
+ *         使用级数展开（x<1）或朗斯基连分式展开（x>=1），用于 MMSE 增益计算。
+ *  @param x 输入参数 (x > 0)
+ *  @returns E1(x) 近似值
+ */
 double exponentialIntegralE1(double x)
 {
     if (x <= 0.0) {
@@ -191,6 +202,14 @@ double singleFrequencyEntropyContribution(double power, double totalPower)
     return -probability * std::log(probability + kEntropyEpsilon);
 }
 
+/** @brief 基于谱熵贡献的 Z-score 动态计算先验 SNR 平滑因子 alpha。
+ *         信号的熵贡献偏离历史均值越大，alpha 越小（更倾向于瞬时估计）。
+ *  @param entropyContribution 当前帧在某个频点的熵贡献
+ *  @param runningMean 历史熵贡献均值
+ *  @param runningVariance 历史熵贡献方差
+ *  @param parameters ANR 参数配置
+ *  @returns 自适应平滑因子，范围 [adaptiveAlphaMinimum, adaptiveAlphaMaximum]
+ */
 double adaptiveAlphaFromEntropy(
     double entropyContribution,
     double runningMean,
@@ -228,6 +247,11 @@ void updateEntropyStatistics(
         effectiveTrackingRate * delta * delta;
 }
 
+/** @brief 初始化或重新初始化 ANR 流式处理状态：分配帧缓冲、窗函数、频谱估计及熵统计数组。
+ *  @param state 待初始化的流式状态
+ *  @param sampleRate 信号采样率 (Hz)
+ *  @param parameters ANR 参数配置
+ */
 void initializeStreamingState(
     AdaptiveNoiseReduction::StreamingState& state,
     int sampleRate,
@@ -378,6 +402,11 @@ void protectOutputRms(
 }
 } // namespace
 
+/** @brief 根据采样率和样本数生成自适应降噪的帧级参数。
+ *  @param sampleRate 信号采样率 (Hz)
+ *  @param sampleCount 信号样本总数
+ *  @returns 包含帧长、跳数、噪声跟踪参数等的配置
+ */
 AdaptiveNoiseReduction::Parameters AdaptiveNoiseReduction::makeParameters(
     int sampleRate,
     int sampleCount)
@@ -416,6 +445,11 @@ AdaptiveNoiseReduction::Parameters AdaptiveNoiseReduction::makeParameters(
     return parameters;
 }
 
+/** @brief 对整段音频信号进行离线自适应降噪处理（非流式）。
+ *  @param input 输入音频信号
+ *  @param sampleRate 信号采样率 (Hz)
+ *  @returns 降噪后的音频信号
+ */
 QVector<float> AdaptiveNoiseReduction::denoise(
     const QVector<float>& input,
     int sampleRate)
@@ -657,6 +691,12 @@ void AdaptiveNoiseReduction::resetStreamingState(StreamingState& state)
     state = StreamingState{};
 }
 
+/** @brief 对流式输入音频进行自适应降噪，保持跨帧状态以实现连续处理。
+ *  @param input 当前帧输入音频信号
+ *  @param sampleRate 信号采样率 (Hz)
+ *  @param state 流式处理状态（保持跨帧噪声估计和 OLA 缓冲区）
+ *  @returns 当前帧降噪后的音频信号
+ */
 QVector<float> AdaptiveNoiseReduction::denoiseStreaming(
     const QVector<float>& input,
     int sampleRate,

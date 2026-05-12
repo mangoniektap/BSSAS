@@ -1,4 +1,8 @@
-﻿import QtQuick
+﻿/**
+ * @file UpdateDialog.qml
+ * @brief 更新对话框。展示新版本信息、发布说明并提供下载与安装控制。
+ */
+import QtQuick
 import QtQuick.Controls
 import BSSAS
 
@@ -14,6 +18,11 @@ Popup {
         ? Popup.NoAutoClose
         : (Popup.CloseOnEscape | Popup.CloseOnPressOutside)
 
+    /**
+     * @brief 格式化字节数为可读字符串（B / KB / MB / GB）。
+     * @param bytes 字节数
+     * @returns 格式化后的字符串
+     */
     function formatBytes(bytes) {
         if (bytes <= 0) {
             return "未知"
@@ -29,6 +38,10 @@ Popup {
         return value.toFixed(unitIndex === 0 ? 0 : 2) + " " + units[unitIndex]
     }
 
+    /**
+     * @brief 生成安装包下载进度标签文本。
+     * @returns 进度描述字符串
+     */
     function progressLabel() {
         if (updateManager.totalBytes > 0) {
             const percent = Math.max(0, Math.min(100, Math.round(updateManager.downloadProgress * 100)))

@@ -1,3 +1,8 @@
+/** @file ActiveNoiseCancellation.cpp
+ *  @brief 自适应主动降噪 (ANC) 算法实现。基于 LMS 自适应滤波器，通过参考噪声信号消除目标信号中的噪声分量。
+ *         包含直流阻断、时延对齐、互相关延迟估计、自适应权重更新及流式处理接口。
+ */
+
 #include "ActiveNoiseCancellation.h"
 
 #include "DataManager.h"
@@ -234,6 +239,15 @@ double normalizedCorrelationAtLag(
     return cross / denominator;
 }
 
+/** @brief 在延迟范围内搜索目标信号与参考信号之间的最佳互相关延迟。
+ *  @param target 目标信号（待降噪）
+ *  @param reference 参考噪声信号
+ *  @param tail 上一批参考信号的尾部（用于负延迟对齐）
+ *  @param parameters ANC 参数配置
+ *  @param targetCount 参与计算的目标样本数
+ *  @param bestCorrelation 输出最佳相关系数
+ *  @returns 最佳延迟样本数（正=参考滞后，负=参考超前）
+ */
 int chooseReferenceLag(
     const QVector<float>& target,
     const QVector<float>& reference,
@@ -307,6 +321,13 @@ void clearAdaptiveWeights(ActiveNoiseCancellation::StreamingState& state)
     state.hasUsableWeights = false;
 }
 
+/** @brief 对流式缓存中的待处理样本执行 LMS 自适应滤波降噪。
+ *         包含延迟对齐、LMS 权重更新、直流阻断后的参考/目标信号的逐样本滤波。
+ *  @param state 流式处理状态
+ *  @param flushing 是否为刷新模式（处理所有缓存样本，不等待更多参考数据）
+ *  @param metrics 输出降噪指标（可选）
+ *  @returns 降噪后的输出信号
+ */
 QVector<float> processPending(
     ActiveNoiseCancellation::StreamingState& state,
     bool flushing,
@@ -460,6 +481,10 @@ QVector<float> processPending(
 }
 } // namespace
 
+/** @brief 根据采样率生成默认的 ANC 算法参数。
+ *  @param sampleRate 信号采样率 (Hz)
+ *  @returns 包含滤波器长度、延迟范围、步长等参数的默认配置
+ */
 ActiveNoiseCancellation::Parameters ActiveNoiseCancellation::makeParameters(int sampleRate)
 {
     const int effectiveSampleRate = normalizeSampleRate(sampleRate);
@@ -483,6 +508,14 @@ ActiveNoiseCancellation::Parameters ActiveNoiseCancellation::makeParameters(int 
     return parameters;
 }
 
+/** @brief 使用默认参数对目标信号进行自适应主动降噪处理（便捷重载）。
+ *  @param targetSignal 待降噪的目标信号
+ *  @param referenceNoise 参考噪声信号
+ *  @param sampleRate 信号采样率 (Hz)
+ *  @param state 流式处理状态（保持跨帧上下文）
+ *  @param metrics 输出降噪指标（可选）
+ *  @returns 降噪后的输出信号
+ */
 QVector<float> ActiveNoiseCancellation::cancel(
     const QVector<float>& targetSignal,
     const QVector<float>& referenceNoise,
@@ -499,6 +532,15 @@ QVector<float> ActiveNoiseCancellation::cancel(
         metrics);
 }
 
+/** @brief 使用自定义参数对目标信号进行自适应主动降噪处理。
+ *  @param targetSignal 待降噪的目标信号
+ *  @param referenceNoise 参考噪声信号
+ *  @param sampleRate 信号采样率 (Hz)
+ *  @param state 流式处理状态（保持跨帧上下文）
+ *  @param parameters 自定义 ANC 参数
+ *  @param metrics 输出降噪指标（可选）
+ *  @returns 降噪后的输出信号
+ */
 QVector<float> ActiveNoiseCancellation::cancel(
     const QVector<float>& targetSignal,
     const QVector<float>& referenceNoise,
@@ -547,6 +589,11 @@ QVector<float> ActiveNoiseCancellation::cancel(
     return processPending(state, false, metrics);
 }
 
+/** @brief 强制刷新流式状态中的所有缓存数据，输出最后一批降噪结果。
+ *  @param state 流式处理状态
+ *  @param metrics 输出降噪指标（可选）
+ *  @returns 缓存中所有可处理样本的降噪输出
+ */
 QVector<float> ActiveNoiseCancellation::flush(
     StreamingState& state,
     Metrics* metrics)

@@ -1,3 +1,8 @@
+/**
+ * @file MotionArtifactReduction.cpp
+ * @brief 运动伪迹衰减模块，利用EMD（经验模态分解）将信号分解为IMFs，并结合频带能量比和分形维度评分的伪迹识别策略，对可疑IMF进行选择性衰减后重构干净信号。
+ */
+
 #include "MotionArtifactReduction.h"
 #include "DataManager.h"
 #include "FractalDimensionUtils.h"
@@ -287,7 +292,13 @@ double smoothArtifactScore(double bandRatio, double fdScore, double fdThreshold,
     return std::clamp(score, 0.0, 1.0);
 }
 
-// ---------- 核心帧处理（大幅优化）----------
+/**
+ * @brief 对单帧信号进行EMD分解，检测低频伪迹IMF，基于频带能量比和分形维度评分选择性衰减后重构干净帧。
+ * @param frame 输入音频帧。
+ * @param sampleRate 采样率（Hz）。
+ * @param params 算法参数。
+ * @returns 伪迹削减后的帧。
+ */
 QVector<float> reduceFrame(const QVector<float>& frame, int sampleRate,
                            const MotionArtifactReduction::Parameters& params)
 {
@@ -393,6 +404,12 @@ QVector<float> reduceFrame(const QVector<float>& frame, int sampleRate,
 
 // ========== 公有方法实现 ==========
 
+/**
+ * @brief 根据采样率与采样点数生成运动伪迹削减参数。
+ * @param sampleRate 采样率（Hz）。
+ * @param sampleCount 信号采样点数。
+ * @returns 自适应配置的算法参数结构体。
+ */
 MotionArtifactReduction::Parameters MotionArtifactReduction::makeParameters(
     int sampleRate, int sampleCount)
 {
@@ -432,6 +449,13 @@ QVector<float> MotionArtifactReduction::reduce(const QVector<float>& input, int 
     return reduce(input, sampleRate, params);
 }
 
+/**
+ * @brief 使用指定参数对信号进行运动伪迹抑制（OLA分帧处理）。
+ * @param input 输入信号。
+ * @param sampleRate 采样率（Hz）。
+ * @param params 算法参数。
+ * @returns 伪迹抑制后的信号。
+ */
 QVector<float> MotionArtifactReduction::reduce(const QVector<float>& input, int sampleRate,
                                                const Parameters& params)
 {

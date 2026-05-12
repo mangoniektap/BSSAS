@@ -1,3 +1,8 @@
+/**
+ * @file WAVHandle.cpp
+ * @brief WAV文件导入/导出处理模块，通过内嵌Python脚本实现Float32-缓存到WAV格式的双向转换；支持实时多通道批量保存与离线单通道导入。
+ */
+
 #include "WAVHandle.h"
 
 #include "DatabaseStoragePaths.h"
@@ -430,6 +435,9 @@ void WAVHandle::setReferenceNoiseChannelSaveEnabled(bool enabled)
     emit referenceNoiseChannelSaveEnabledChanged();
 }
 
+/**
+ * @brief 启动实时多通道数据导出为WAV文件，在后台线程中对选定通道应用降噪后处理后写入。
+ */
 void WAVHandle::startSaveAsWav()
 {
     DataManager* realtimeDataManager = DataManager::instance();
@@ -653,6 +661,10 @@ void WAVHandle::handleExportFailed(const QString& errorMessage)
     emit saveFailed(errorMessage);
 }
 
+/**
+ * @brief 从WAV文件导入数据，通过Python脚本解析为float32电压，再经过预处理管道后存储。
+ * @param wavFilePATH WAV文件的本地路径或file:// URL。
+ */
 void WAVHandle::startReadFromWav(const QString& wavFilePATH)
 {
     DataManager::instance()->clearImportedData();
@@ -820,6 +832,16 @@ void WAVHandleWorker::exportToWav(
 #endif
 }
 
+/**
+ * @brief 将实时多通道临时缓存文件拼合后导出为多通道WAV。
+ * @param channelTemporaryFilePaths 各通道临时缓存文件路径列表。
+ * @param postProcessedChannelCount 需要后处理的通道数（前N个通道）。
+ * @param sampleRate 采样率（Hz）。
+ * @param waveletDenoisingEnabled 是否启用小波去噪。
+ * @param transientNoiseSuppressionEnabled 是否启用瞬态噪声抑制。
+ * @param motionArtifactReductionEnabled 是否启用运动伪迹削减。
+ * @param pythonScriptPath WAV导出Python脚本路径。
+ */
 void WAVHandleWorker::exportRealtimeChannelsToWav(
     const QVector<QString>& channelTemporaryFilePaths,
     int postProcessedChannelCount,
@@ -910,6 +932,11 @@ void WAVHandleWorker::exportRealtimeChannelsToWav(
     emit operationCompleted();
 }
 
+/**
+ * @brief 通过Python脚本将WAV文件解析为PCM int16，转换为float32电压，再经预处理管道后通过信号通知主线程。
+ * @param pythonScriptPath WAV导入Python脚本路径。
+ * @param wavFilePATH WAV文件路径。
+ */
 void WAVHandleWorker::importFromWav(const QString& pythonScriptPath, const QString& wavFilePATH)
 {
     if (pythonScriptPath.isEmpty() || !QFileInfo::exists(pythonScriptPath)) {

@@ -1,4 +1,7 @@
-﻿// OSDataVisualizationGraphCartesianWaveform.qml
+/**
+ * @file OSDataVisualizationGraphCartesianWaveform.qml
+ * @brief 离线数据波形图笛卡尔可视化组件，用于显示导入的离线波形数据并支持缩放、平移交互。
+ */
 import QtQuick
 import QtGraphs
 import BSSAS
@@ -38,10 +41,23 @@ Item {
     readonly property real axisResolutionX: root.currentResolutionX * root.timeAxisScaleFactor
     readonly property int axisLabelDecimalsX: root.labelDecimals(root.axisDisplayMin, root.axisResolutionX)
     readonly property int axisLabelDecimalsY: root.labelDecimals(root.displayMinY, root.currentResolutionY)
+    /**
+     * @brief 将值钳制在指定范围内
+     * @param value 输入值
+     * @param minimum 下限
+     * @param maximum 上限
+     * @returns 钳制后的值
+     */
     function clamp(value, minimum, maximum) {
         return Math.min(Math.max(value, minimum), maximum);
     }
 
+    /**
+     * @brief 将值按指定步长四舍五入
+     * @param value 输入值
+     * @param step 步长 (必须为有限正数)
+     * @returns 舍入后的值；输入无效时返回原值
+     */
     function roundToStep(value, step) {
         if (!Number.isFinite(value) || !Number.isFinite(step) || step <= 0) {
             return value;
@@ -50,6 +66,11 @@ Item {
         return Math.round(Math.round(value / step) * step * 1000) / 1000;
     }
 
+    /**
+     * @brief 计算数值的有效小数位数
+     * @param value 输入数值
+     * @returns 小数位数 (0~3)
+     */
     function decimalsForValue(value) {
         var absValue = Math.abs(value);
 
@@ -63,10 +84,20 @@ Item {
         return 3;
     }
 
+    /**
+     * @brief 计算坐标轴标签的合适小数位数
+     * @param anchorValue 锚点值
+     * @param intervalValue 刻度间隔值
+     * @returns 小数位数 (最多 3 位)
+     */
     function labelDecimals(anchorValue, intervalValue) {
         return Math.min(3, Math.max(decimalsForValue(anchorValue), decimalsForValue(intervalValue)));
     }
 
+    /**
+     * @brief 获取规范化后的 X 轴数据边界
+     * @returns 不小于默认可见时长的边界值
+     */
     function normalizedBoundaryX() {
         if (!Number.isFinite(dataBoundaryX)) {
             return defaultVisibleTimeLength;
@@ -75,11 +106,22 @@ Item {
         return Math.max(defaultVisibleTimeLength, dataBoundaryX);
     }
 
+    /**
+     * @brief 钳制 Y 轴分辨率到合法范围
+     * @param resolution 期望分辨率
+     * @returns 经步长舍入并钳制后的分辨率
+     */
     function clampYResolution(resolution) {
         var safeResolution = Number.isFinite(resolution) ? resolution : maxResolutionY;
         return clamp(roundToStep(safeResolution, resolutionStepY), minResolutionY, maxResolutionY);
     }
 
+    /**
+     * @brief 根据数据边界钳制 X 轴分辨率
+     * @param resolution 期望分辨率
+     * @param boundaryX X 轴数据边界
+     * @returns 钳制后的分辨率
+     */
     function clampResolution(resolution, boundaryX) {
         var safeBoundaryX = Number.isFinite(boundaryX) ? boundaryX : normalizedBoundaryX();
         var safeResolution = Number.isFinite(resolution) ? resolution : defaultResolutionX;
@@ -88,6 +130,13 @@ Item {
         return clamp(safeResolution, minResolutionX, boundedMaxResolution);
     }
 
+    /**
+     * @brief 应用 X 轴窗口设置（平移/缩放的核心函数）
+     * @details 根据给定的最小值和分辨率计算并应用新的可视范围，
+     *          同时更新数据边界并刷新数据序列。
+     * @param minimumX 窗口最小 X 值
+     * @param resolutionX 期望的 X 轴分辨率
+     */
     function applyXAxisWindow(minimumX, resolutionX) {
         if (syncingXAxisWindow) {
             return;
@@ -115,14 +164,25 @@ Item {
         refreshSeries();
     }
 
+    /**
+     * @brief 更新 X 轴数据边界为导入数据时长
+     */
     function updateDataBoundary() {
         dataBoundaryX = Math.max(defaultVisibleTimeLength, dataManager.importedWaveformDuration());
     }
 
+    /**
+     * @brief 重置视图到默认状态
+     */
     function resetView() {
         applyXAxisWindow(0, defaultResolutionX);
     }
 
+    /**
+     * @brief 以鼠标位置为中心缩放 X 轴
+     * @param mouseX 鼠标在绘图区内的 X 坐标
+     * @param zoomFactor 缩放因子 (>1 放大，<1 缩小)
+     */
     function zoomXAxis(mouseX, zoomFactor) {
         var plotArea = graphsView.plotArea;
         if (plotArea.width <= 0 || plotArea.height <= 0) {
@@ -138,6 +198,10 @@ Item {
         applyXAxisWindow(focusX - nextSpanX * ratio, nextResolutionX);
     }
 
+    /**
+     * @brief 调整 Y 轴分辨率（幅度缩放）
+     * @param deltaSteps 步数变化量 (正数放大，负数缩小)
+     */
     function adjustYResolution(deltaSteps) {
         if (!Number.isFinite(deltaSteps) || deltaSteps === 0) {
             return;
@@ -146,6 +210,12 @@ Item {
         currentResolutionY = clampYResolution(currentResolutionY + deltaSteps * resolutionStepY);
     }
 
+    /**
+     * @brief 判断点是否位于绘图区内
+     * @param x 点的 X 坐标
+     * @param y 点的 Y 坐标
+     * @returns 点在绘图区内返回 true
+     */
     function isPointInPlotArea(x, y) {
         var plotArea = graphsView.plotArea;
         if (plotArea.width <= 0 || plotArea.height <= 0) {
@@ -156,6 +226,12 @@ Item {
                 && y >= plotArea.y && y <= plotArea.y + plotArea.height;
     }
 
+    /**
+     * @brief 判断点是否位于 Y 轴标签区域内（用于 Y 轴缩放）
+     * @param x 点的 X 坐标
+     * @param y 点的 Y 坐标
+     * @returns 点在 Y 轴标签区域内返回 true
+     */
     function isPointInYAxisLabelArea(x, y) {
         var plotArea = graphsView.plotArea;
         if (plotArea.width <= 0 || plotArea.height <= 0) {
@@ -171,6 +247,10 @@ Item {
                 && y >= plotArea.y && y <= plotArea.y + plotArea.height;
     }
 
+    /**
+     * @brief 沿 X 轴平移视图
+     * @param deltaPixels 鼠标拖拽的像素偏移量
+     */
     function panXAxis(deltaPixels) {
         var plotArea = graphsView.plotArea;
         if (plotArea.width <= 0) {
@@ -186,6 +266,11 @@ Item {
         applyXAxisWindow(displayMin + deltaX, currentResolutionX);
     }
 
+    /**
+     * @brief 对数据点集应用时间轴比例缩放
+     * @param points 原始数据点数组
+     * @returns 缩放后的数据点数组；比例因子为 1 时返回原数组
+     */
     function scaledPoints(points) {
         if (!points || points.length === 0 || timeAxisScaleFactor === 1) {
             return points;
@@ -196,6 +281,10 @@ Item {
         });
     }
 
+    /**
+     * @brief 刷新波形数据序列
+     * @details 根据当前分辨率选择原始数据或降采样数据更新图表。
+     */
     function refreshSeries() {
         var visiblePoints = currentResolutionX < rawDataResolutionThreshold
                 ? dataManager.importedWaveformPoints(displayMin, displayMax)

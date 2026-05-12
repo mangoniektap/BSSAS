@@ -1,3 +1,8 @@
+/** @file DataManager.cpp
+ *  @brief 核心数据管理器实现。负责管理实时/导入数据的两级缓存（时域波形、降采样数据、频谱数据、特征值），
+ *         临时文件存储与读写、采样率配置、高速采集模式切换、波形/频谱数据的按时间/频率区间查询。
+ */
+
 #include "DataManager.h"
 #include "DatabaseStoragePaths.h"
 
@@ -1528,6 +1533,9 @@ bool DataManager::highSpeedCollectionMode() const
     return m_highSpeedCollectionMode;
 }
 
+/** @brief 启用/禁用高速采集模式，自动将采样率切换至 100kHz 或恢复为普通模式采样率。
+ *  @param enabled true 启用高速模式，false 恢复普通模式
+ */
 void DataManager::setHighSpeedCollectionMode(bool enabled)
 {
     bool modeChanged = false;
@@ -1651,6 +1659,10 @@ void DataManager::splicDownsampledData(const QVector<QPointF>& downsampledData)
     m_databaseCache->splicDownsampledData(downsampledData);
 }
 
+/** @brief 存储导入文件的时域波形数据到临时缓存。
+ *  @param sampleRate 信号采样率 (Hz)
+ *  @param importedRawData 导入的原始采样数据
+ */
 void DataManager::storeImportedTimeDomainData(
     int sampleRate,
     const QVector<float>& importedRawData)
@@ -1685,6 +1697,11 @@ void DataManager::storeImportedSpectrumData(
     ensureDatabaseCacheCreated()->storeImportedSpectrumData(sampleRate, magnitudes);
 }
 
+/** @brief 存储导入文件的 STFT 频谱数据（多帧格式），每帧包含中心时间和幅度值。
+ *  @param sampleRate 信号采样率 (Hz)
+ *  @param frameCenterTimes 每帧中心时间（秒）
+ *  @param frameMagnitudes 每帧的频谱幅度数组
+ */
 void DataManager::storeImportedStftSpectrumData(
     int sampleRate,
     const QVector<float>& frameCenterTimes,
@@ -2023,6 +2040,12 @@ int DataManager::importedWaveformSampleRate()
     return m_databaseCache->importedWaveformSampleRate();
 }
 
+/** @brief 将 QPointF 向量转换为 QVariantList，支持 x 坐标的缩放和偏移。
+ *  @param source 原始点序列
+ *  @param xScale x 坐标缩放因子（默认 1.0）
+ *  @param xOffset x 坐标偏移量（默认 0.0）
+ *  @returns QVariantList，每个元素为 QPointF 类型
+ */
 QVariantList DataManager::toVariantPointList(
     const QVector<QPointF>& source,
     double xScale,

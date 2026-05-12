@@ -1,3 +1,7 @@
+/** @file updater_main.cpp
+ *  @brief Windows 平台自动更新器入口，负责等待主进程退出、静默安装新版本、清理临时文件并启动更新后的应用程序。
+ */
+
 #ifdef _WIN32
 
 #include <windows.h>
@@ -21,6 +25,10 @@ struct UpdaterArguments
     std::wstring targetPath;
 };
 
+/** @brief 去除字符串首尾空白。
+ *  @param text 输入宽字符串
+ *  @returns 去除首尾空白后的字符串副本
+ */
 std::wstring trimCopy(const std::wstring& text)
 {
     std::size_t start = 0;
@@ -36,6 +44,9 @@ std::wstring trimCopy(const std::wstring& text)
     return text.substr(start, end - start);
 }
 
+/** @brief 获取当前可执行文件的完整路径。
+ *  @returns 当前进程的可执行文件路径，失败时返回空字符串
+ */
 std::wstring currentExecutablePath()
 {
     std::wstring buffer(MAX_PATH, L'\0');
@@ -57,6 +68,10 @@ std::wstring currentExecutablePath()
     }
 }
 
+/** @brief 将文件路径规范化为绝对路径并统一为小写，便于路径比较。
+ *  @param path 输入文件路径
+ *  @returns 规范化后的小写绝对路径
+ */
 std::wstring normalizeFilePath(const std::wstring& path)
 {
     std::error_code errorCode;
@@ -78,11 +93,21 @@ std::wstring normalizeFilePath(const std::wstring& path)
     return normalizedPath;
 }
 
+/** @brief 判断两个路径是否指向同一个文件（通过规范化后比较）。
+ *  @param leftPath 第一个路径
+ *  @param rightPath 第二个路径
+ *  @returns 若两路径指向同一文件则返回 true
+ */
 bool isSameFilePath(const std::wstring& leftPath, const std::wstring& rightPath)
 {
     return normalizeFilePath(leftPath) == normalizeFilePath(rightPath);
 }
 
+/** @brief 将字符串解析为进程 ID (DWORD)。
+ *  @param text 输入字符串
+ *  @param processId 输出进程 ID
+ *  @returns 解析成功返回 true，否则返回 false
+ */
 bool parseProcessId(const std::wstring& text, DWORD* processId)
 {
     if (processId == nullptr || text.empty()) {
@@ -101,6 +126,12 @@ bool parseProcessId(const std::wstring& text, DWORD* processId)
     return true;
 }
 
+/** @brief 解析命令行参数，提取更新器所需的等待 PID、安装器路径和目标路径。
+ *  @param argc 参数个数
+ *  @param argv 参数数组
+ *  @param parsedArguments 输出解析后的参数结构
+ *  @returns 解析成功返回 true，参数不完整或无效返回 false
+ */
 bool parseArguments(int argc, wchar_t* argv[], UpdaterArguments* parsedArguments)
 {
     if (argc <= 1 || argv == nullptr || parsedArguments == nullptr) {
@@ -154,6 +185,11 @@ bool fileExists(const std::wstring& path)
            (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
 }
 
+/** @brief 等待指定进程退出（最长等待 120 秒）。
+ *  @param processId 目标进程 ID
+ *  @param errorMessage 输出超时错误信息
+ *  @returns 进程已退出或进程句柄无效时返回 true
+ */
 bool waitForProcessExit(DWORD processId, std::wstring* errorMessage)
 {
     HANDLE processHandle = OpenProcess(SYNCHRONIZE, FALSE, processId);
@@ -174,6 +210,10 @@ bool waitForProcessExit(DWORD processId, std::wstring* errorMessage)
     return false;
 }
 
+/** @brief 将路径转义为 PowerShell 单引号字面量，防止特殊字符导致脚本注入。
+ *  @param path 待转义的路径
+ *  @returns PowerShell 安全引用的路径字符串
+ */
 std::wstring quoteForPowerShellLiteral(const std::wstring& path)
 {
     std::wstring escapedPath = path;
@@ -188,6 +228,13 @@ std::wstring quoteForPowerShellLiteral(const std::wstring& path)
     return L"'" + escapedPath + L"'";
 }
 
+/** @brief 通过 ShellExecuteEx 启动一个独立的子进程。
+ *  @param filePath 可执行文件路径
+ *  @param parameters 命令行参数
+ *  @param workingDirectory 工作目录
+ *  @param showCommand 窗口显示方式 (SW_HIDE / SW_SHOWNORMAL)
+ *  @returns 启动成功返回 true
+ */
 bool startDetachedShellProcess(
     const std::wstring& filePath,
     const std::wstring& parameters,
@@ -207,6 +254,10 @@ bool startDetachedShellProcess(
     return ShellExecuteExW(&executeInfo) == TRUE;
 }
 
+/** @brief 通过后台 PowerShell 脚本延迟删除指定的文件/目录。
+ *  @param paths 待清理的路径列表
+ *  @returns 成功启动后台清理进程返回 true
+ */
 bool scheduleCleanup(const std::vector<std::wstring>& paths)
 {
     std::wstring script = L"Start-Sleep -Seconds 2";
@@ -244,6 +295,11 @@ bool scheduleCleanup(const std::vector<std::wstring>& paths)
         SW_HIDE);
 }
 
+/** @brief 以管理员权限静默运行安装程序，等待完成。
+ *  @param installerPath 安装程序路径
+ *  @param errorMessage 输出失败原因
+ *  @returns 安装成功返回 true
+ */
 bool runInstallerSilently(const std::wstring& installerPath, std::wstring* errorMessage)
 {
     SHELLEXECUTEINFOW executeInfo {};
@@ -282,6 +338,10 @@ bool runInstallerSilently(const std::wstring& installerPath, std::wstring* error
     return true;
 }
 
+/** @brief 启动更新后的目标应用程序。
+ *  @param targetPath 目标可执行文件路径
+ *  @returns 启动成功返回 true
+ */
 bool startTargetApplication(const std::wstring& targetPath)
 {
     const std::filesystem::path targetFilesystemPath(targetPath);
@@ -294,6 +354,7 @@ bool startTargetApplication(const std::wstring& targetPath)
 
 } // namespace
 
+/** @brief Windows 更新器主入口：解析参数 -> 等待主进程退出 -> 静默安装 -> 清理旧文件 -> 启动新版应用。 */
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 {
     int argc = 0;

@@ -1,3 +1,8 @@
+/**
+ * @file RecognitionServiceManager.cpp
+ * @brief 远程肠鸣音识别服务管理模块，负责HTTP multipart文件上传、API鉴权、取消请求、JSON响应解析与进度通知。
+ */
+
 #include "RecognitionServiceManager.h"
 
 #include <QCoreApplication>
@@ -106,6 +111,14 @@ QString RecognitionServiceManager::lastRequestId() const
     return m_lastRequestId;
 }
 
+/**
+ * @brief 通过HTTP multipart向远程服务上传WAV文件并请求肠鸣音识别。
+ * @param filePath 本地WAV文件路径。
+ * @param endpointUrl 识别服务URL。
+ * @param apiKey API鉴权密钥。
+ * @param verbose 是否输出详细信息。
+ * @param includeProbs 是否包含概率值。
+ */
 void RecognitionServiceManager::recognizeFile(
     const QString& filePath,
     const QString& endpointUrl,
@@ -265,6 +278,7 @@ void RecognitionServiceManager::recognizeFile(
     });
 }
 
+/** @brief 取消当前正在进行的识别请求。 */
 void RecognitionServiceManager::cancelRecognition()
 {
     if (!m_busy || m_reply == nullptr || m_cancelRequested) {
@@ -352,6 +366,7 @@ void RecognitionServiceManager::setLastRequestId(const QString& lastRequestId)
     emit lastRequestIdChanged();
 }
 
+/** @brief 统一错误出口：重置busy状态并发送错误信号。 */
 void RecognitionServiceManager::finishWithError(const QString& message)
 {
     setBusy(false);

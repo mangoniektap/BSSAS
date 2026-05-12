@@ -1,4 +1,8 @@
-﻿pragma ComponentBehavior: Bound
+/**
+ * @file DateSelection.qml
+ * @brief 日期选择器组件，支持日历视图、年份列表和文本输入三种日期选择方式。
+ */
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Effects
@@ -27,7 +31,8 @@ Item {
     readonly property url _rightIconSource: "qrc:/qt/qml/BSSASContent/images/right.png"
 
     property date _viewDate: new Date()
-    property int _inputMode: 0 // 0: Calendar, 1: Year list, 2: Text input
+    /** 输入模式: 0=日历视图, 1=年份列表, 2=文本输入 */
+    property int _inputMode: 0
     property bool _emitRejectedOnClose: false
 
     signal accepted(date date)
@@ -36,11 +41,22 @@ Item {
 
     visible: false
 
+    /**
+     * @brief 为颜色附加透明度
+     * @param sourceColor 源颜色值
+     * @param alphaValue 透明度 (0~1)
+     * @returns 附加透明度的新颜色
+     */
     function colorWithAlpha(sourceColor, alphaValue) {
         const color = Qt.color(sourceColor)
         return Qt.rgba(color.r, color.g, color.b, alphaValue)
     }
 
+    /**
+     * @brief 规范化日期值，将年/月/日钳制到合法范围
+     * @param value 日期对象或可转换值
+     * @returns 规范化后的 Date 对象
+     */
     function normalizeDate(value) {
         const dateValue = value instanceof Date ? value : new Date(value)
 
@@ -54,6 +70,10 @@ Item {
         return new Date(clampedYear, clampedMonth, clampedDay)
     }
 
+    /**
+     * @brief 从 selectedDate 同步内部状态
+     * @details 规范化选中日期，更新视图日期，重置输入模式为日历视图。
+     */
     function syncFromSelection() {
         const normalizedDate = normalizeDate(selectedDate)
         if (!isSameDay(normalizedDate, selectedDate)) {
@@ -68,6 +88,10 @@ Item {
         }
     }
 
+    /**
+     * @brief 打开日期选择器弹窗
+     * @details 将覆盖层挂载到顶层父组件，播放入场动画。
+     */
     function open() {
         let root = control
         while (root.parent) {
@@ -93,6 +117,10 @@ Item {
         enterAnimation.start()
     }
 
+    /**
+     * @brief 关闭日期选择器弹窗
+     * @param shouldReject 为 true 时在关闭后触发 rejected 信号
+     */
     function close(shouldReject) {
         _emitRejectedOnClose = shouldReject === true
         enterAnimation.stop()
@@ -100,20 +128,41 @@ Item {
         exitAnimation.start()
     }
 
+    /**
+     * @brief 获取指定月份的天数
+     * @param year 年份
+     * @param month 月份 (0-11)
+     * @returns 该月的天数
+     */
     function getDaysInMonth(year, month) {
         return new Date(year, month + 1, 0).getDate()
     }
 
+    /**
+     * @brief 获取指定月份第一天的星期索引
+     * @param year 年份
+     * @param month 月份 (0-11)
+     * @returns 星期索引 (0=周日, 6=周六)
+     */
     function getFirstDayOfMonth(year, month) {
         return new Date(year, month, 1).getDay()
     }
 
+    /**
+     * @brief 判断两个日期是否为同一天
+     * @param firstDate 第一个日期
+     * @param secondDate 第二个日期
+     * @returns 同一天返回 true
+     */
     function isSameDay(firstDate, secondDate) {
         return firstDate.getFullYear() === secondDate.getFullYear()
                 && firstDate.getMonth() === secondDate.getMonth()
                 && firstDate.getDate() === secondDate.getDate()
     }
 
+    /**
+     * @brief 在日历视图和文本输入模式之间切换
+     */
     function toggleInputMode() {
         _inputMode = _inputMode === 2 ? 0 : 2
         if (_inputMode === 2 && dateInput) {
@@ -122,6 +171,12 @@ Item {
         }
     }
 
+    /**
+     * @brief 解析并应用文本输入框中的日期
+     * @details 支持 MM/DD/YYYY、MM-DD-YYYY、MM.DD.YYYY 格式。
+     *          解析成功则更新选中日期并切回日历视图；失败则显示错误提示。
+     * @returns 解析成功返回 true，否则返回 false
+     */
     function applyInputDate() {
         const parts = dateInput.text.trim().split(/[\/.-]/)
 

@@ -1,3 +1,7 @@
+/**
+ * @file Constants.qml
+ * @brief 全局常量定义单例。管理窗口尺寸、屏幕适配比例及版本号等运行时常量。
+ */
 pragma Singleton
 import QtQuick
 import QtQuick.Window

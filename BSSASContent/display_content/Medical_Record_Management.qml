@@ -1,3 +1,7 @@
+/**
+ * @file Medical_Record_Management.qml
+ * @brief 病历管理页面。统一管理受试者信息录入、采集参数配置、算法分析结果与综合结论表单。
+ */
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -13,23 +17,48 @@ Page {
     property int recordingHour: new Date().getHours()
     property int recordingMinute: new Date().getMinutes()
 
+    /**
+     * @brief 数字补零为两位，如 3 -> "03"。
+     * @param value 待补零的数字
+     * @returns 两位数字字符串
+     */
     function padNumber(value) {
         return value.toString().padStart(2, "0")
     }
 
+    /**
+     * @brief 格式化采集日期为 "yyyy 年 MM 月 dd 日" 格式。
+     * @param value Date 对象
+     * @returns 格式化后的日期字符串
+     */
     function formatRecordingDate(value) {
         return Qt.formatDate(value, "yyyy 年 MM 月 dd 日")
     }
 
+    /**
+     * @brief 格式化采集时间为 "HH 时 MM 分" 格式。
+     * @param hour 小时
+     * @param minute 分钟
+     * @returns 格式化后的时间字符串
+     */
     function formatRecordingTime(hour, minute) {
         return padNumber(hour) + " 时 " + padNumber(minute) + " 分"
     }
 
+    /**
+     * @brief 解析选择框与文本框的组合值：优先取文本框输入，为空时取选择框显示文本。
+     * @param selectControl 下拉选择框控件
+     * @param textControl 文本输入框控件
+     * @returns 最终的有效取值字符串
+     */
     function resolvedSelectValue(selectControl, textControl) {
         const customText = textControl.text.trim()
         return customText.length > 0 ? customText : selectControl.displayText
     }
 
+    /**
+     * @brief 表单文本输入框组件，预置样式、圆角、颜色与浮动占位符。
+     */
     component FormTextField : TextFields {
         type: "outlined"
         fieldHeight: 52
@@ -48,6 +77,9 @@ Page {
         selectByMouse: true
     }
 
+    /**
+     * @brief 表单多行文本域组件，带自定义占位符叠加层与焦点高亮边框。
+     */
     component FormTextArea : TextArea {
         id: control
         implicitHeight: 110
@@ -90,6 +122,9 @@ Page {
         }
     }
 
+    /**
+     * @brief 日期/时间选择触发按钮，展示格式化文本并在点击时打开对应选择弹窗。
+     */
     component PickerButton : Button {
         id: control
         implicitHeight: 52

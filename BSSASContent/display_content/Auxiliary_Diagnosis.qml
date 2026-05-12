@@ -1204,8 +1204,9 @@ Item {
                 Rectangle {
                     id: summaryPanel
                     Layout.fillHeight: true
-                    Layout.preferredWidth: Math.max(330, Math.min(430, diagnosisBody.width * 0.34))
                     Layout.minimumWidth: 310
+                    Layout.preferredWidth: 380
+                    Layout.maximumWidth: 430
                     radius: 16
                     color: Theme.textWhite
                     border.width: 1

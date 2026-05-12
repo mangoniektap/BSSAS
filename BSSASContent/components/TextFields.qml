@@ -1,4 +1,8 @@
-﻿import QtQuick
+﻿/**
+ * @file TextFields.qml
+ * @brief 文本输入字段组件。支持 filled/outlined 两种样式、浮动标签动画、前导/尾随图标、密码显隐切换及表单验证。
+ */
+import QtQuick
 import QtQuick.Layouts
 import BSSAS
 
@@ -126,11 +130,28 @@ Item {
     signal editingFinished()
     signal trailingIconClicked()
 
+    /**
+     * @brief 将颜色值与指定透明度混合
+     * @param sourceColor 源颜色值
+     * @param alphaValue 透明度（0.0~1.0）
+     * @returns 混合后的RGBA颜色值
+     */
     function colorWithAlpha(sourceColor, alphaValue) {
         const color = Qt.color(sourceColor)
         return Qt.rgba(color.r, color.g, color.b, alphaValue)
     }
 
+    /**
+     * @brief 在Canvas上绘制outlined样式的圆角矩形边框，支持标签位置的缺口
+     * @param ctx Canvas 2D绘制上下文
+     * @param canvasWidth 画布宽度
+     * @param canvasHeight 画布高度
+     * @param radius 圆角半径
+     * @param strokeWidth 边框线宽
+     * @param strokeColor 边框颜色
+     * @param gapStart 缺口起始X坐标（-1表示无缺口）
+     * @param gapEnd 缺口结束X坐标
+     */
     function drawOutlinedBorder(ctx, canvasWidth, canvasHeight, radius, strokeWidth, strokeColor, gapStart, gapEnd) {
         const halfStroke = strokeWidth / 2
         const left = halfStroke
@@ -178,6 +199,9 @@ Item {
         ctx.stroke()
     }
 
+    /**
+     * @brief 触发outlined样式Canvas重绘，包括普通边框和聚焦边框
+     */
     function requestOutlinePaint() {
         if (outlineCanvas) {
             outlineCanvas.requestPaint()

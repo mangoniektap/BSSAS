@@ -1,3 +1,7 @@
+/**
+ * @file RadioButton.qml
+ * @brief 单选按钮组组件。支持单选交互、自定义样式和动画效果。
+ */
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Effects
@@ -6,6 +10,12 @@ import BSSAS
 Rectangle {
     id: root
 
+    /**
+     * @brief 将颜色值与指定透明度混合
+     * @param sourceColor 源颜色值
+     * @param alphaValue 透明度（0.0~1.0）
+     * @returns 混合后的RGBA颜色值
+     */
     function colorWithAlpha(sourceColor, alphaValue) {
         const color = Qt.color(sourceColor)
         return Qt.rgba(color.r, color.g, color.b, alphaValue)
@@ -46,6 +56,10 @@ Rectangle {
     }
 
     property real maxTextWidth: 0
+
+    /**
+     * @brief 遍历模型数据，计算所有选项文本的最大宽度
+     */
     function updateMaxTextWidth() {
         var maxWidth = 0
         for (var i = 0; i < model.length; i++) {

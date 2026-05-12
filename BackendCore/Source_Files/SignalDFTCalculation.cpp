@@ -1,3 +1,8 @@
+/**
+ * @file SignalDFTCalculation.cpp
+ * @brief 信号DFT/STFT计算模块，负责实时流式STFT帧生成、频谱幅值归一化与缩放展示、导入信号的STFT离线缓存，以及时域频谱点的时间轴查询。
+ */
+
 #include "SignalDFTCalculation.h"
 
 #include "DataManager.h"
@@ -260,6 +265,7 @@ SignalDFTCalculation::~SignalDFTCalculation()
     }
 }
 
+/** @brief 启动实时STFT处理，清空缓存并从预处理管道拉取数据。 */
 void SignalDFTCalculation::startDFTProcessing()
 {
     clearRealtimeStftCache();
@@ -272,6 +278,11 @@ void SignalDFTCalculation::stopDFTProcessing()
     clearRealtimeStftCache();
 }
 
+/**
+ * @brief 接收新生成的STFT帧数据并存入滑动窗口缓存。
+ * @param dftData QVariantList格式的频谱点。
+ * @param centerTimeSeconds 该帧的中心时间（秒）。
+ */
 void SignalDFTCalculation::updateDFTData(QVariantList dftData, double centerTimeSeconds)
 {
     m_dftData = dftData;
@@ -347,6 +358,9 @@ void SignalDFTCalculation::clearRealtimeStftCache()
     emit dftResultReady();
 }
 
+/**
+ * @brief 在后台线程中对导入数据执行离线STFT计算和缓存。
+ */
 void SignalDFTCalculation::startImportedDftProcessing()
 {
     if (m_importBusy) {
@@ -446,6 +460,9 @@ void DFTWorker::stopWork()
     }
 }
 
+/**
+ * @brief 定时从预处理缓冲区拉取数据，构建STFT帧并同步输出频谱图数据。
+ */
 void DFTWorker::processing()
 {
     const QVector<float> rawData = SignalPreprocessing::instance()->getDataCache();

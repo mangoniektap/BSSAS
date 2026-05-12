@@ -1,3 +1,7 @@
+/**
+ * @file Home.qml
+ * @brief 首页主界面。提供搜索入口、概览数据卡片、近期信号预览与系统状态监控面板。
+ */
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -101,6 +105,11 @@ Item {
     ]
     property string helperMessage: "可在目录 D:/BSSASdatabase 中检索文件；如不存在则使用 %LOCALAPPDATA%/BSSASdatabase。"
 
+    /**
+     * @brief 安全获取计数值，将输入转为非负整数，NaN 或负数返回 0。
+     * @param value 输入值
+     * @returns 安全的非负整数计数值
+     */
     function safeCount(value) {
         const numberValue = Number(value)
         if (isNaN(numberValue) || numberValue < 0) {
@@ -110,10 +119,20 @@ Item {
         return Math.round(numberValue)
     }
 
+    /**
+     * @brief 格式化计数，添加千位分隔符。
+     * @param value 计数值
+     * @returns 带千位分隔符的计数字符串
+     */
     function formatCount(value) {
         return root.safeCount(value).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")
     }
 
+    /**
+     * @brief 格式化百分比值，将输入限制在 [0,100] 并附加 "%" 符号。
+     * @param value 百分比数值
+     * @returns 格式化后的百分比字符串，无效输入返回 "--"
+     */
     function formatPercent(value) {
         const numberValue = Number(value)
         if (isNaN(numberValue) || numberValue < 0) {
@@ -123,6 +142,11 @@ Item {
         return Math.round(Math.max(0, Math.min(100, numberValue))) + "%"
     }
 
+    /**
+     * @brief 根据百分比值返回对应的状态颜色：>=85 危险，>=70 警告，否则主色。
+     * @param value 百分比数值
+     * @returns 对应的状态颜色值
+     */
     function percentStatusColor(value) {
         const numberValue = Number(value)
         if (isNaN(numberValue)) {
@@ -138,10 +162,20 @@ Item {
         return Theme.primary
     }
 
+    /**
+     * @brief 获取设备连接状态颜色：已连接返回成功色，否则返回警告色。
+     * @returns 设备状态对应颜色
+     */
     function deviceStatusColor() {
         return systemStatusMonitor.deviceConnected ? Theme.success : Theme.warning
     }
 
+    /**
+     * @brief 计算当前值与历史值的指标变化量，返回描述文本与趋势方向（1/0/-1）。
+     * @param current 当前计数值
+     * @param previous 历史计数值
+     * @returns 包含 "text" 和 "trend" 字段的变化描述对象
+     */
     function metricDelta(current, previous) {
         const currentCount = root.safeCount(current)
         const previousCount = root.safeCount(previous)
@@ -169,6 +203,12 @@ Item {
         }
     }
 
+    /**
+     * @brief 根据卡片数据与变化趋势返回增量文本颜色：警告卡用危险色，上升用成功色，下降用危险色。
+     * @param cardData 概览卡片数据对象
+     * @param deltaInfo metricDelta 返回的变化信息对象
+     * @returns 对应状态的文本颜色值
+     */
     function metricDeltaColor(cardData, deltaInfo) {
         if (deltaInfo.trend === 0) {
             return Theme.textWeak
@@ -181,10 +221,16 @@ Item {
         return deltaInfo.trend > 0 ? Theme.success : Theme.danger
     }
 
+    /**
+     * @brief 从数据库刷新首页概览统计数据并更新 overviewStats。
+     */
     function refreshOverviewStats() {
         overviewStats = databaseManager.homeOverviewStats()
     }
 
+    /**
+     * @brief 根据搜索栏关键词执行数据库文件搜索，更新搜索结果与提示信息。
+     */
     function performSearch() {
         const keyword = searchField.text.trim()
         hasSearched = true
@@ -212,6 +258,12 @@ Item {
         helperMessage = "共找到 " + searchResults.length + " 个匹配文件。"
     }
 
+    /**
+     * @brief 判断指定项是否包含根坐标系下的某个位置点，用于点击区域检测。
+     * @param item 待检测的项
+     * @param rootPosition 根坐标系下的位置点
+     * @returns 位置点是否落在该项内
+     */
     function itemContainsRootPosition(item, rootPosition) {
         const localPosition = item.mapFromItem(root, rootPosition.x, rootPosition.y)
         return localPosition.x >= 0

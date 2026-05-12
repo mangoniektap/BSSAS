@@ -1,4 +1,8 @@
-﻿import QtQuick
+﻿/**
+ * @file DAQ_Device_Console.qml
+ * @brief DAQ 设备控制台页面。管理设备连接/初始化、通道激活、采样率调节、高速采集模式与事件定位。
+ */
+import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import BSSAS
@@ -40,11 +44,20 @@ Item {
         return true
     }
 
+    /**
+     * @brief 为源颜色叠加 alpha 通道值，返回新的 rgba 颜色。
+     * @param sourceColor 源颜色
+     * @param alphaValue alpha 值 [0,1]
+     * @returns 带 alpha 的 Qt.rgba 颜色值
+     */
     function colorWithAlpha(sourceColor, alphaValue) {
         const color = Qt.color(sourceColor)
         return Qt.rgba(color.r, color.g, color.b, alphaValue)
     }
 
+    /**
+     * @brief 切换声源定位状态：已开启则关闭，未开启则跳转传感器配置页面。
+     */
     function toggleVoiceLocalization() {
         if (root.voiceLocalizationEnabled) {
             if (typeof root.closeVoiceLocalization === "function")

@@ -1,6 +1,10 @@
 // Copyright (C) 2024 The Qt Company Ltd.
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
+/** @file main.cpp
+ *  @brief BSSAS 应用程序入口，负责初始化 QML 引擎、注册 C++ 后端对象到 QML 上下文并启动事件循环。
+ */
+
 #include <QGuiApplication>
 #include <QIcon>
 #include <QQmlApplicationEngine>

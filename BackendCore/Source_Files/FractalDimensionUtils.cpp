@@ -1,3 +1,8 @@
+/** @file FractalDimensionUtils.cpp
+ *  @brief 分形维度工具函数实现。基于 Katz 算法计算波形帧的分形复杂度，
+ *         用于肠鸣音信号的特征提取与分类辅助分析。
+ */
+
 #include "FractalDimensionUtils.h"
 
 #include <algorithm>
@@ -5,6 +10,10 @@
 
 namespace FractalDimensionUtils {
 
+/** @brief 基于 Katz 算法计算波形帧的分形复杂度。
+ *  @param frame 双精度浮点波形帧
+ *  @returns 范围 [0, 1] 的分形复杂度，值越高表示波形越复杂
+ */
 double computeWaveformComplexity(const QVector<double>& frame)
 {
     const int sampleCount = frame.size();

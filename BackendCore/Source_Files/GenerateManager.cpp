@@ -1,4 +1,10 @@
-﻿#include "GenerateManager.h"
+﻿/** @file GenerateManager.cpp
+ *  @brief 报告生成管理器实现。负责创建肠鸣音识别与特征提取分析报告 (AFDROIS)，
+ *         通过 JSON 模板 + Python PDF 导出管线生成最终 PDF 报告，
+ *         包含事件统计、频谱特征分析、特征归一化矩阵导出等功能。
+ */
+
+#include "GenerateManager.h"
 
 #include "DataManager.h"
 #include "DatabaseStoragePaths.h"
@@ -161,6 +167,10 @@ double weightedFrequencyAtRatio(const QVector<QPointF>& points, double ratio)
     return points.isEmpty() ? 0.0 : points.constLast().x();
 }
 
+/** @brief 从频谱点序列计算频谱特征指标：主频、频率范围、谱质心、谱熵和高低频能量比。
+ *  @param spectrumPoints 频谱数据点列表（x=频率 Hz, y=幅度）
+ *  @returns 包含频谱指标的 SpectrumMetrics 结构
+ */
 SpectrumMetrics computeSpectrumMetricsFromPoints(const QVariantList& spectrumPoints)
 {
     const QVector<QPointF> rawPoints = extractPointSeries(spectrumPoints);
@@ -243,6 +253,12 @@ SpectrumMetrics computeSpectrumMetricsFromPoints(const QVariantList& spectrumPoi
     return metrics;
 }
 
+/** @brief 从事伯列表计算事件级统计指标：平均时长、平均间隔、峰值幅度、事件率、突发占比和 RMS 能量。
+ *  @param events 事件数据列表，每个事件为 QVariantMap
+ *  @param waveformPoints 时域波形点列表（用于回退能量计算）
+ *  @param totalDurationSeconds 信号总时长（秒）
+ *  @returns 包含事件指标的 EventMetrics 结构
+ */
 EventMetrics computeEventMetrics(
     const QVariantList& events,
     const QVariantList& waveformPoints,
@@ -798,6 +814,11 @@ QVariant mergeJsonTemplate(const QVariant& templateValue, const QVariant& payloa
     return normalizedPayload;
 }
 
+/** @brief 根据特征值构建 HTML 模板变量上下文，包括 STE/ZCR/FD 统计、事件参数表格、频谱指标和偏差评估。
+ *  @param featureValues 特征值字典
+ *  @param generatedAt 报告生成时间
+ *  @returns 模板变量映射表（key 为模板占位符，value 为格式化后的字符串）
+ */
 QVariantMap buildTemplateContext(const QVariantMap& featureValues, const QDateTime& generatedAt)
 {
     const int sampleRate = featureValues.value(QStringLiteral("sampleRate")).toInt();
@@ -1107,6 +1128,13 @@ bool createOrUpdateTemporaryJsonFromTemplate(
 class PDFExport
 {
 public:
+    /** @brief 从报告数据负载导出 PDF：先生成临时 JSON，再调用 Python 导出脚本。
+     *  @param reportPayload 报告数据负载
+     *  @param reportKind 报告类型标识（如 "AFDROIS"）
+     *  @param pdfFilePath 目标 PDF 文件路径
+     *  @param errorMessage 输出错误信息
+     *  @returns 成功返回 pdfFilePath，失败返回空字符串
+     */
     QString exportReport(
         const QVariantMap& reportPayload,
         const QString& reportKind,
@@ -1143,6 +1171,12 @@ public:
         return pdfFilePath;
     }
 
+    /** @brief 从已有的 JSON 文件直接调用 Python 导出脚本生成 PDF。
+     *  @param jsonFilePath 已有的报告 JSON 文件路径
+     *  @param pdfFilePath 目标 PDF 文件路径
+     *  @param errorMessage 输出错误信息
+     *  @returns 成功返回 pdfFilePath，失败返回空字符串
+     */
     QString exportReportFromJson(
         const QString& jsonFilePath,
         const QString& pdfFilePath,
@@ -1359,6 +1393,7 @@ bool GenerateManager::busy() const
     return m_busy;
 }
 
+/** @brief 在工作线程中异步启动肠鸣音识别与特征提取报告 (AFDROIS) 的导出流程。 */
 void GenerateManager::startExportIdentificationAndFeatureExtractionReport()
 {
     if (m_busy) {
@@ -1387,6 +1422,11 @@ void GenerateManager::startExportIdentificationAndFeatureExtractionReport()
     m_exportThread->start();
 }
 
+/** @brief 将导入数据的分析结果持久化为临时 JSON 文件，供后续 PDF 导出使用。
+ *  @param featureValues 特征值字典
+ *  @param errorMessage 输出错误信息
+ *  @returns 写入成功返回 true
+ */
 bool GenerateManager::persistImportedAnalysisTemporaryJson(
     const QVariantMap& featureValues,
     QString* errorMessage)
@@ -1420,6 +1460,9 @@ bool GenerateManager::persistImportedAnalysisTemporaryJson(
     return true;
 }
 
+/** @brief 执行完整的报告导出流程：构建报告数据负载 -> 合并 JSON 模板 -> 调用 Python PDF 导出脚本。
+ *  @returns 成功返回生成的 PDF 文件路径，失败返回空字符串并触发 exportFailed 信号
+ */
 QString GenerateManager::exportIdentificationAndFeatureExtractionReport()
 {
     if (!ensureOutputDirectoryExists()) {
@@ -1495,6 +1538,12 @@ bool GenerateManager::ensureOutputDirectoryExists()
     return QDir().mkpath(DatabaseStoragePaths::REPORTS_PATH);
 }
 
+/** @brief 生成递增序号的报告 ID（格式：REPORTKIND-YYYYMMDD-NNNN）。
+ *         扫描已有文件找到当天最大序号，然后递增 1。
+ *  @param reportKind 报告类型标识
+ *  @param reportDate 报告日期
+ *  @returns 格式为 "REPORTKIND-YYYYMMDD-NNNN" 的唯一报告 ID
+ */
 QString GenerateManager::createReportId(const QString& reportKind, const QDate& reportDate)
 {
     const QString normalizedReportKind = reportKind.trimmed().toUpper();
@@ -1543,6 +1592,13 @@ QString GenerateManager::createOutputFilePath(const QString& reportId, const QSt
     return filePath;
 }
 
+/** @brief 构建完整的报告数据负载，包含元信息、波形/频谱缓存数据、特征统计和模板上下文变量。
+ *  @param featureValues 特征值字典
+ *  @param reportId 报告唯一 ID
+ *  @param reportKind 报告类型标识
+ *  @param generatedAt 生成时间戳
+ *  @returns 结构化报告数据负载 QVariantMap
+ */
 QVariantMap GenerateManager::buildReportPayload(
     const QVariantMap& featureValues,
     const QString& reportId,

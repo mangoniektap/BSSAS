@@ -1,4 +1,8 @@
-﻿import QtQuick
+﻿/**
+ * @file Right_Top_Toolbar.qml
+ * @brief 右上角工具栏。提供设置、最小化、全屏和关闭按钮，支持悬浮动画效果。
+ */
+import QtQuick
 import QtQuick.Controls
 import QtQuick.Effects
 import BSSAS

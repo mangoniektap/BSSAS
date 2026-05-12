@@ -1,3 +1,7 @@
+/**
+ * @file File_Management.qml
+ * @brief 文件管理页面。提供 WAV 音频导入与分析、分析报告打开、数据处理算法开关及数据保存功能。
+ */
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
@@ -34,11 +38,22 @@ Item {
         qsTr("\u540c\u9891\u6bb5\u8fd0\u52a8\u4f2a\u5f71\u6d88\u9664")
     ]
     readonly property bool importAllProcessingState: signalPreprocessing.importAllProcessingEnabled
+    /**
+     * @brief 为源颜色叠加 alpha 通道值，返回新的 rgba 颜色。
+     * @param sourceColor 源颜色
+     * @param alphaValue alpha 值 [0,1]
+     * @returns 带 alpha 的 Qt.rgba 颜色值
+     */
     function colorWithAlpha(sourceColor, alphaValue) {
         const color = Qt.color(sourceColor)
         return Qt.rgba(color.r, color.g, color.b, alphaValue)
     }
 
+    /**
+     * @brief 从文件路径中提取文件名。
+     * @param filePath 完整文件路径
+     * @returns 文件名，空路径返回空字符串
+     */
     function extractFileName(filePath) {
         if (!filePath || filePath.length === 0)
             return ""
@@ -48,16 +63,27 @@ Item {
         return pathSegments.length > 0 ? pathSegments[pathSegments.length - 1] : filePath
     }
 
+    /**
+     * @brief 将 file:// URL 转换为本地文件系统路径。
+     * @param fileUrl 文件 URL
+     * @returns 解码后的本地文件路径
+     */
     function toLocalFilePath(fileUrl) {
         const raw = fileUrl ? fileUrl.toString() : ""
         return raw.length > 0 ? decodeURIComponent(raw).replace(/^file:\/\/\//, "") : ""
     }
 
+    /**
+     * @brief 完成导入分析工作流，重置导入状态标志与状态文本。
+     */
     function finishImportWorkflow() {
         root.pendingImportedAnalysis = false
         root.importStatusText = ""
     }
 
+    /**
+     * @brief 打开分析报告：若 Loader 已加载则直接调用 open()，否则激活 Loader 延时打开。
+     */
     function openAnalysisReport() {
         if (analysisReportLoader.item) {
             root.pendingReportOpen = false
@@ -69,6 +95,11 @@ Item {
         analysisReportLoader.active = true
     }
 
+    /**
+     * @brief 切换指定导入处理算法的启用状态。
+     * @param index 处理算法索引（0-5 对应带通滤波、陷波滤波、自适应降噪、小波降噪、瞬态噪声抑制、运动伪影消除）
+     * @param enabledValue 显式目标状态，未传入则取反
+     */
     function toggleImportProcessing(index, enabledValue) {
         const hasExplicitValue = enabledValue !== undefined
         switch (index) {
@@ -95,6 +126,11 @@ Item {
         }
     }
 
+    /**
+     * @brief 获取指定导入处理算法的当前启用状态。
+     * @param index 处理算法索引（0-5）
+     * @returns 启用返回 true，否则返回 false
+     */
     function importProcessingStateAt(index) {
         switch (index) {
         case 0:
@@ -114,6 +150,10 @@ Item {
         }
     }
 
+    /**
+     * @brief 批量设置所有导入处理算法的启用状态。
+     * @param enabledValue 目标启用状态
+     */
     function setAllImportProcessing(enabledValue) {
         signalPreprocessing.setAllImportProcessingEnabled(!!enabledValue)
     }

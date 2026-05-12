@@ -1,3 +1,8 @@
+/**
+ * @file WaveletTransform.cpp
+ * @brief 平稳小波变换（SWT）去噪模块，使用Symlet-6小波进行多级无下采样分解，结合稳健MAD噪声估计、频带自适应BayesShrink阈值、Garrote收缩和局部脉冲保护，输出高保真去噪信号。
+ */
+
 #include "WaveletTransform.h"
 #include "DataManager.h"
 
@@ -403,6 +408,12 @@ QVector<double> denoiseStationary(const QVector<double>& inputSignal, int decomp
 } // namespace
 
 // ---------- 公有接口 (不变) ----------
+/**
+ * @brief 使用Symlet-6小波对信号进行平稳小波变换（SWT）多级分解。
+ * @param signal 输入信号。
+ * @param levels 请求的分解层数。
+ * @returns 包含各层细节系数和最终近似系数的分解结果。
+ */
 WaveletTransform::DecompositionResult WaveletTransform::decompose(
     const QVector<double>& signal, int levels)
 {
@@ -430,6 +441,12 @@ WaveletTransform::DecompositionResult WaveletTransform::decompose(
     return result;
 }
 
+/**
+ * @brief 对信号执行SWT去噪（离线批量模式）。
+ * @param rawData 输入浮点信号。
+ * @param sampleRate 采样率（Hz），用于确定合理分解层数。
+ * @returns 去噪后的浮点信号。
+ */
 QVector<float> WaveletTransform::denoise(const QVector<float>& rawData, int sampleRate)
 {
     if (rawData.isEmpty()) return {};
@@ -518,6 +535,13 @@ bool WaveletTransform::debugLoggingEnabled()
     return g_debugLoggingEnabled.load(std::memory_order_relaxed);
 }
 
+/**
+ * @brief 流式SWT去噪，维护历史缓冲区以消除逐块处理后边界伪影。
+ * @param rawData 当前数据块。
+ * @param sampleRate 采样率（Hz）。
+ * @param state 流式状态，含历史缓冲和重叠参数。
+ * @returns 去噪后的当前块输出。
+ */
 QVector<float> WaveletTransform::denoiseStreaming(
     const QVector<float>& rawData,
     int sampleRate,

@@ -1,3 +1,7 @@
+/**
+ * @file ToastNotification.qml
+ * @brief 轻提示通知组件。从窗口顶部滑入显示成功或错误消息，支持自动消失、毛玻璃背景和自定义持续时间。
+ */
 import QtQuick
 import QtQuick.Effects
 import BSSAS
@@ -50,11 +54,22 @@ Item {
     opacity: 0
     z: 1500
 
+    /**
+     * @brief 将颜色值与指定透明度混合
+     * @param sourceColor 源颜色值
+     * @param alphaValue 透明度（0.0~1.0）
+     * @returns 混合后的RGBA颜色值
+     */
     function colorWithAlpha(sourceColor, alphaValue) {
         const color = Qt.color(sourceColor)
         return Qt.rgba(color.r, color.g, color.b, alphaValue)
     }
 
+    /**
+     * @brief 显示提示消息，从顶部滑入并自动消失
+     * @param msg 消息文本，为空则忽略
+     * @param textColor 消息文本颜色，未指定则使用默认强调色
+     */
     function show(msg, textColor) {
         if (!msg || msg.length === 0) {
             return
@@ -74,14 +89,25 @@ Item {
         hideTimer.start()
     }
 
+    /**
+     * @brief 显示成功提示消息（绿色）
+     * @param msg 消息文本
+     */
     function showSuccess(msg) {
         show(msg, root._successColor)
     }
 
+    /**
+     * @brief 显示错误提示消息（红色）
+     * @param msg 消息文本
+     */
     function showError(msg) {
         show(msg, root._errorColor)
     }
 
+    /**
+     * @brief 隐藏提示消息，播放向上滑出动画
+     */
     function hide() {
         hideTimer.stop()
         enter.stop()

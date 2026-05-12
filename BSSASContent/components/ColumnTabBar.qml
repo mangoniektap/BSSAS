@@ -1,3 +1,7 @@
+/**
+ * @file ColumnTabBar.qml
+ * @brief 垂直列式标签栏组件，基于 TabBar 实现垂直排列的选项卡切换。
+ */
 import QtQuick
 import QtQuick.Controls
 

@@ -1,10 +1,14 @@
+/**
+ * @file MainWindow_Background.qml
+ * @brief 主窗口背景层。提供应用底色和内容展示区域。
+ */
 import QtQuick
 import QtQuick.Controls
 import BSSAS
 
 Item {
     anchors.fill: parent
-    //暴露精确到具体参数
+    // 暴露精确到具体参数
     property alias display_area: right_bottom_rectangle
     
     Rectangle {

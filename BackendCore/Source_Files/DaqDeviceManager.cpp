@@ -1,3 +1,8 @@
+/** @file DaqDeviceManager.cpp
+ *  @brief DAQ 数据采集设备管理器实现。封装 USB-DAQ4203 硬件驱动，负责设备初始化/配置/启停采集、
+ *         多通道交织数据解交织、缓冲区定时读取、线程安全的数据缓存及通道激活状态管理。
+ */
+
 #include "DaqDeviceManager.h"
 
 #include "DataManager.h"
@@ -211,6 +216,7 @@ DaqWorker::~DaqWorker()
         m_timer = nullptr;
     }
 }
+/** @brief 初始化 DAQ 硬件设备：打开 USB 连接、配置采集参数、更新连接状态。 */
 void DaqWorker::initializeDevice()
 {
     QMutexLocker locker(&m_deviceMutex);    // 自动加锁 保护共享资源 确保线程安全
@@ -409,6 +415,9 @@ void DaqWorker::onCollectionTimer()
         emit rawDataReady(m_channelsDataCache);
     }
 }
+/** @brief 从 DAQ 硬件缓冲区读取原始数据并进行通道解交织。
+ *  @returns 按物理通道索引组织的原始采集数据，每个通道为一个 QVector<float>
+ */
 QVector<QVector<float>> DaqWorker::collectRawData()
 {   
     QElapsedTimer timer;
@@ -473,6 +482,9 @@ QVector<QVector<float>> DaqWorker::collectRawData()
     m_interleavedPhase = (m_interleavedPhase + rawInterleavedData) % PHYSICAL_CHANNEL_COUNT;
     return rawData;
 }
+/** @brief 打开 USB 连接并检测 DAQ 设备，获取有效设备句柄。
+ *  @returns 设备打开成功返回 true
+ */
 bool DaqWorker::openDevice()
 {
     // 不同厂商 DLL 的 openUSB 返回语义可能不同

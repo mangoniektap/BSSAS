@@ -1,3 +1,8 @@
+/**
+ * @file UpdateManager.cpp
+ * @brief 软件自动更新管理模块，负责从远程清单检查版本、下载安装包、SHA256校验完整性，并启动独立更新器进程完成主程序替换。
+ */
+
 #include "UpdateManager.h"
 
 #include "DatabaseStoragePaths.h"
@@ -463,6 +468,10 @@ QString UpdateManager::statusMessage() const
     return m_statusMessage;
 }
 
+/**
+ * @brief 从配置的版本清单URL检查是否有新版本。
+ * @param manual 是否为用户手动触发（手动触发时会在完成与否时显示toast提示）。
+ */
 void UpdateManager::checkForUpdates(bool manual)
 {
     if (busy()) {
@@ -509,6 +518,9 @@ void UpdateManager::checkForUpdatesOnStartup()
     checkForUpdates(false);
 }
 
+/**
+ * @brief 启动更新下载与安装流程：创建临时目录、下载安装包、校验SHA256，最后启动独立更新器进程。
+ */
 void UpdateManager::startUpdate()
 {
     if (m_checking) {
@@ -677,6 +689,9 @@ void UpdateManager::setDownloadProgress(qint64 downloadedBytes, qint64 totalByte
     emit downloadProgressChanged();
 }
 
+/**
+ * @brief 处理版本清单HTTP响应：解析JSON、比较版本号、判断是否强制更新。
+ */
 void UpdateManager::onManifestReplyFinished()
 {
     QNetworkReply* const reply = m_manifestReply;
