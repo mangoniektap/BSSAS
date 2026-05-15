@@ -27,14 +27,19 @@ public slots:
     void startWork();
     /** @brief 停止实时 DFT 处理 */
     void stopWork();
+    /** @brief 设置实时 STFT 分析窗长 @param windowSeconds 窗长 (秒) */
+    void setAnalysisWindowSeconds(double windowSeconds);
 
 private slots:
     /** @brief 定时处理回调，执行 STFT 帧生成 */
     void processing();
 
 signals:
-    /** @brief 频谱结果就绪信号 @param frequencies 频谱数据列表 @param centerTimeSeconds 帧中心时间 (秒) */
-    void resultReady(const QVariantList& frequencies, double centerTimeSeconds);
+    /** @brief 频谱结果就绪信号 @param frequencies 频谱数据列表 @param centerTimeSeconds 帧中心时间 (秒) @param windowSeconds 帧窗长 (秒) */
+    void resultReady(
+        const QVariantList& frequencies,
+        double centerTimeSeconds,
+        double windowSeconds);
 
 private:
     /** @brief 从累积采样数据中生成 STFT 帧 */
@@ -43,6 +48,7 @@ private:
     QTimer* m_timer = nullptr;
     QVector<float> m_pendingSamples;
     double m_processedSeconds = 0.0;
+    double m_analysisWindowSeconds = 0.2;
     int m_stftWindowSampleCount = 0;
     const int COLLECTION_INTERVAL_MS = 100;
     QMutex m_dataMutex;
@@ -56,6 +62,18 @@ class SignalDFTCalculation : public QObject
     Q_PROPERTY(QVariantList dftData READ dftData NOTIFY dftResultReady)
     /** @brief 导入分析是否正在进行 */
     Q_PROPERTY(bool importBusy READ importBusy NOTIFY importBusyChanged)
+    /** @brief 实时 STFT 分析窗长 (秒) */
+    Q_PROPERTY(
+        double realtimeAnalysisWindowSeconds
+        READ realtimeAnalysisWindowSeconds
+        WRITE setRealtimeAnalysisWindowSeconds
+        NOTIFY realtimeAnalysisWindowSecondsChanged)
+    /** @brief 导入 STFT 分析窗长 (秒) */
+    Q_PROPERTY(
+        double importAnalysisWindowSeconds
+        READ importAnalysisWindowSeconds
+        WRITE setImportAnalysisWindowSeconds
+        NOTIFY importAnalysisWindowSecondsChanged)
 
 public:
     explicit SignalDFTCalculation(QObject* parent = nullptr);
@@ -65,6 +83,14 @@ public:
     Q_INVOKABLE const QVariantList& dftData() const { return m_dftData; }
     /** @brief 导入分析是否忙碌 @returns 忙碌状态 */
     Q_INVOKABLE bool importBusy() const { return m_importBusy; }
+    /** @brief 获取实时 STFT 分析窗长 @returns 窗长 (秒) */
+    double realtimeAnalysisWindowSeconds() const { return m_realtimeAnalysisWindowSeconds; }
+    /** @brief 设置实时 STFT 分析窗长 @param windowSeconds 窗长 (秒) */
+    void setRealtimeAnalysisWindowSeconds(double windowSeconds);
+    /** @brief 获取导入 STFT 分析窗长 @returns 窗长 (秒) */
+    double importAnalysisWindowSeconds() const { return m_importAnalysisWindowSeconds; }
+    /** @brief 设置导入 STFT 分析窗长 @param windowSeconds 窗长 (秒) */
+    void setImportAnalysisWindowSeconds(double windowSeconds);
     /** @brief 启动实时 DFT 处理 */
     Q_INVOKABLE void startDFTProcessing();
     /** @brief 停止实时 DFT 处理 */
@@ -96,6 +122,10 @@ signals:
     void importBusyChanged();
     /** @brief 导入 DFT 处理完成信号 */
     void importedDftProcessingFinished();
+    /** @brief 实时 STFT 分析窗长变化信号 @param windowSeconds 窗长 (秒) */
+    void realtimeAnalysisWindowSecondsChanged(double windowSeconds);
+    /** @brief 导入 STFT 分析窗长变化信号 @param windowSeconds 窗长 (秒) */
+    void importAnalysisWindowSecondsChanged(double windowSeconds);
     /** @brief 实时处理启动信号 */
     void processingStart();
     /** @brief 实时处理停止信号 */
@@ -104,19 +134,22 @@ signals:
 private:
     /** @brief 设置导入忙碌状态 @param busy 是否忙碌 */
     void setImportBusy(bool busy);
-    /** @brief 更新 DFT 数据缓存 @param dftData 频谱数据 @param centerTimeSeconds 中心时间 (秒) */
-    void updateDFTData(QVariantList dftData, double centerTimeSeconds);
+    /** @brief 更新 DFT 数据缓存 @param dftData 频谱数据 @param centerTimeSeconds 中心时间 (秒) @param windowSeconds 窗长 (秒) */
+    void updateDFTData(QVariantList dftData, double centerTimeSeconds, double windowSeconds);
     /** @brief 清空实时 STFT 缓存 */
     void clearRealtimeStftCache();
 
     QVariantList m_dftData;                             /**< DFT 频谱数据缓存 */
     QVector<double> m_realtimeStftCenterTimes;          /**< 实时 STFT 帧中心时间列表 */
+    QVector<double> m_realtimeStftWindowSeconds;         /**< 实时 STFT 帧窗长列表 */
     QVector<QVariantList> m_realtimeStftFrames;         /**< 实时 STFT 帧数据列表 */
     static const int MAX_REALTIME_STFT_FRAMES = 300;    /**< 实时 STFT 帧最大缓存数 */
     QThread* m_thread = nullptr;                        /**< 实时处理线程 */
     DFTWorker* m_worker = nullptr;                      /**< 实时 DFT 工作对象 */
     QThread* m_importThread = nullptr;                  /**< 导入处理线程 */
     bool m_importBusy = false;                          /**< 导入处理忙碌标志 */
+    double m_realtimeAnalysisWindowSeconds = 0.2;        /**< 实时 STFT 分析窗长 (秒) */
+    double m_importAnalysisWindowSeconds = 0.2;          /**< 导入 STFT 分析窗长 (秒) */
 };
 
 #endif // SIGNALDFTCALCULATION_H

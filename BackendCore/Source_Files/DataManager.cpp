@@ -123,14 +123,23 @@ void ensureDatabaseStorageDirectories()
     ensureDirectoryExists(DatabaseStoragePaths::AUDIO_PATH);
 }
 
-constexpr float kImportedStftWindowSeconds = 0.2f;
+constexpr double kDefaultAnalysisWindowSeconds = 0.2;
+constexpr float kImportedStftMetadataMarker = -19513.0f;
+constexpr int kImportedStftMetadataValueCount = 3;
 
-int computeImportedStftWindowSampleCount(int sampleRate)
+double sanitizeAnalysisWindowSeconds(double windowSeconds)
+{
+    return std::isfinite(windowSeconds) && windowSeconds > 0.0
+        ? windowSeconds
+        : kDefaultAnalysisWindowSeconds;
+}
+
+int computeImportedStftWindowSampleCount(int sampleRate, double windowSeconds)
 {
     const int sanitizedSampleRate = sanitizeSampleRate(sampleRate);
     return std::max(1, static_cast<int>(std::lround(
                            static_cast<double>(sanitizedSampleRate) *
-                           static_cast<double>(kImportedStftWindowSeconds))));
+                           sanitizeAnalysisWindowSeconds(windowSeconds))));
 }
 
 int computeImportedStftFftSize(int windowSampleCount)
@@ -416,13 +425,25 @@ void DatabaseCache::storeImportedSpectrumData(
 void DatabaseCache::storeImportedStftSpectrumData(
     int sampleRate,
     const QVector<float>& frameCenterTimes,
-    const QVector<QVector<float>>& frameMagnitudes)
+    const QVector<QVector<float>>& frameMagnitudes,
+    double windowSeconds)
 {
     removeTemporaryFile(m_importedSpectrumTemporaryFilePath);
 
     if (frameCenterTimes.isEmpty() || frameMagnitudes.isEmpty() ||
         frameCenterTimes.size() != frameMagnitudes.size()) {
         return;
+    }
+
+    const qsizetype magnitudeCountPerFrame = frameMagnitudes.first().size();
+    if (magnitudeCountPerFrame <= 0) {
+        return;
+    }
+
+    for (const QVector<float>& magnitudes : frameMagnitudes) {
+        if (magnitudes.size() != magnitudeCountPerFrame) {
+            return;
+        }
     }
 
     if (!ensureImportedSpectrumTemporaryFileCreated()) {
@@ -437,12 +458,22 @@ void DatabaseCache::storeImportedStftSpectrumData(
         return;
     }
 
+    const float metadataValues[kImportedStftMetadataValueCount] = {
+        kImportedStftMetadataMarker,
+        static_cast<float>(sanitizeAnalysisWindowSeconds(windowSeconds)),
+        static_cast<float>(magnitudeCountPerFrame)
+    };
+    if (!writeBytesToTemporaryFile(
+            m_importedSpectrumTemporaryFilePath,
+            reinterpret_cast<const char*>(metadataValues),
+            static_cast<qint64>(sizeof(metadataValues)),
+            QIODevice::WriteOnly | QIODevice::Append,
+            "append imported stft metadata")) {
+        return;
+    }
+
     for (qsizetype frameIndex = 0; frameIndex < frameMagnitudes.size(); ++frameIndex) {
         const QVector<float>& magnitudes = frameMagnitudes[frameIndex];
-        if (magnitudes.isEmpty()) {
-            continue;
-        }
-
         const float centerTimeSeconds = frameCenterTimes[frameIndex];
         if (!writeBytesToTemporaryFile(
                 m_importedSpectrumTemporaryFilePath,
@@ -1245,7 +1276,10 @@ QVariantList DatabaseCache::spectrumPointsFromImportedStftTemporaryFile(
     }
 
     const qsizetype selectedStartIndex =
-        static_cast<qsizetype>(selection.selectedFrameIndex * selection.valuesPerFrame + 1);
+        static_cast<qsizetype>(
+            selection.frameDataStartIndex +
+            selection.selectedFrameIndex * selection.valuesPerFrame +
+            1);
     const QVector<float> selectedMagnitudes = readFloatRangeFromTemporaryFile(
         temporaryFilePath,
         selectedStartIndex,
@@ -1302,7 +1336,7 @@ QVariantMap DatabaseCache::spectrumTimeRangeFromImportedStftTemporaryFile(
 
     return buildSpectrumTimeRange(
         selection.selectedCenterSeconds,
-        static_cast<double>(kImportedStftWindowSeconds));
+        selection.windowSeconds);
 }
 
 DatabaseCache::ImportedStftFrameSelection DatabaseCache::selectImportedStftFrameFromTemporaryFile(
@@ -1321,17 +1355,46 @@ DatabaseCache::ImportedStftFrameSelection DatabaseCache::selectImportedStftFrame
         return selection;
     }
 
-    const int windowSampleCount = computeImportedStftWindowSampleCount(selection.sampleRate);
-    selection.fftSize = computeImportedStftFftSize(windowSampleCount);
-    selection.magnitudeCountPerFrame = (selection.fftSize / 2) + 1;
+    qint64 frameValueCount = totalValueCount;
+    selection.windowSeconds = kDefaultAnalysisWindowSeconds;
+    const QVector<float> metadataValues = readFloatRangeFromTemporaryFile(
+        temporaryFilePath,
+        0,
+        kImportedStftMetadataValueCount);
+    const bool hasMetadata = metadataValues.size() == kImportedStftMetadataValueCount &&
+        qFuzzyCompare(metadataValues[0], kImportedStftMetadataMarker);
+    if (hasMetadata) {
+        const int metadataMagnitudeCount =
+            static_cast<int>(std::lround(static_cast<double>(metadataValues[2])));
+        if (metadataMagnitudeCount <= 0 ||
+            totalValueCount <= kImportedStftMetadataValueCount) {
+            return selection;
+        }
+
+        selection.frameDataStartIndex = kImportedStftMetadataValueCount;
+        selection.windowSeconds = sanitizeAnalysisWindowSeconds(
+            static_cast<double>(metadataValues[1]));
+        selection.magnitudeCountPerFrame = metadataMagnitudeCount;
+        selection.fftSize = selection.magnitudeCountPerFrame > 1
+            ? (selection.magnitudeCountPerFrame - 1) * 2
+            : 1;
+        frameValueCount = totalValueCount - kImportedStftMetadataValueCount;
+    } else {
+        const int windowSampleCount = computeImportedStftWindowSampleCount(
+            selection.sampleRate,
+            selection.windowSeconds);
+        selection.fftSize = computeImportedStftFftSize(windowSampleCount);
+        selection.magnitudeCountPerFrame = (selection.fftSize / 2) + 1;
+    }
+
     selection.valuesPerFrame = static_cast<qint64>(selection.magnitudeCountPerFrame) + 1;
 
     if (selection.valuesPerFrame <= 1 ||
-        (totalValueCount % selection.valuesPerFrame) != 0) {
+        (frameValueCount % selection.valuesPerFrame) != 0) {
         return selection;
     }
 
-    const qint64 frameCount = totalValueCount / selection.valuesPerFrame;
+    const qint64 frameCount = frameValueCount / selection.valuesPerFrame;
     if (frameCount <= 0) {
         return selection;
     }
@@ -1349,7 +1412,8 @@ DatabaseCache::ImportedStftFrameSelection DatabaseCache::selectImportedStftFrame
     for (qint64 frameIndex = 0; frameIndex < frameCount; ++frameIndex) {
         const qint64 centerOffsetBytes =
             static_cast<qint64>(sizeof(float)) +
-            frameIndex * selection.valuesPerFrame * static_cast<qint64>(sizeof(float));
+            (selection.frameDataStartIndex + frameIndex * selection.valuesPerFrame) *
+                static_cast<qint64>(sizeof(float));
         if (!temporaryFile.seek(centerOffsetBytes)) {
             return selection;
         }
@@ -1701,18 +1765,21 @@ void DataManager::storeImportedSpectrumData(
  *  @param sampleRate 信号采样率 (Hz)
  *  @param frameCenterTimes 每帧中心时间（秒）
  *  @param frameMagnitudes 每帧的频谱幅度数组
+ *  @param windowSeconds STFT 分析窗长（秒）
  */
 void DataManager::storeImportedStftSpectrumData(
     int sampleRate,
     const QVector<float>& frameCenterTimes,
-    const QVector<QVector<float>>& frameMagnitudes)
+    const QVector<QVector<float>>& frameMagnitudes,
+    double windowSeconds)
 {
     QMutexLocker locker(&m_databaseCacheMutex);
 
     ensureDatabaseCacheCreated()->storeImportedStftSpectrumData(
         sampleRate,
         frameCenterTimes,
-        frameMagnitudes);
+        frameMagnitudes,
+        windowSeconds);
 }
 
 void DataManager::storeImportedFeatureValues(const QVariantMap& featureValues)

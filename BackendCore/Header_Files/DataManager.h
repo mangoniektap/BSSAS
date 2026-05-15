@@ -66,11 +66,13 @@ public:
      *  @param sampleRate 采样率
      *  @param frameCenterTimes 各帧中心时间 (秒)
      *  @param frameMagnitudes 每帧的幅度谱向量
+     *  @param windowSeconds STFT 分析窗长 (秒)
      */
     void storeImportedStftSpectrumData(
         int sampleRate,
         const QVector<float>& frameCenterTimes,
-        const QVector<QVector<float>>& frameMagnitudes);
+        const QVector<QVector<float>>& frameMagnitudes,
+        double windowSeconds);
 
     /** @brief 清空所有导入数据缓存 */
     void clearImportedData();
@@ -162,8 +164,10 @@ private:
         int fftSize = 0;
         int magnitudeCountPerFrame = 0;
         qint64 valuesPerFrame = 0;
+        qint64 frameDataStartIndex = 0;
         qint64 selectedFrameIndex = 0;
         double selectedCenterSeconds = 0.0;
+        double windowSeconds = 0.0;
     };
 
     // --- 写入临时文件 ---
@@ -361,7 +365,8 @@ public:
     void storeImportedStftSpectrumData(
         int sampleRate,
         const QVector<float>& frameCenterTimes,
-        const QVector<QVector<float>>& frameMagnitudes);
+        const QVector<QVector<float>>& frameMagnitudes,
+        double windowSeconds);
     void storeImportedFeatureValues(const QVariantMap& featureValues);
     void setImportedFeatureTemporaryFilePath(const QString& temporaryFilePath);
     void updateImportedAnalysisSummary(const QVariantMap& summary);

@@ -49,9 +49,9 @@ quint64 fileTimeToUInt64(const FILETIME& fileTime)
 #endif
 }
 
-SystemStatusMonitor::SystemStatusMonitor(QObject* parent)
+SystemStatusMonitor::SystemStatusMonitor(DaqDeviceManager* daqManager, QObject* parent)
     : QObject(parent)
-    , m_daqManager(DaqDeviceManager::instance())
+    , m_daqManager(daqManager)
     , m_refreshTimer(new QTimer(this))
     , m_deviceStatusText(QStringLiteral("\u672a\u8fde\u63a5"))
 {
@@ -59,6 +59,9 @@ SystemStatusMonitor::SystemStatusMonitor(QObject* parent)
     m_refreshTimer->start(kRefreshIntervalMs);
 
     if (m_daqManager) {
+        connect(m_daqManager, &QObject::destroyed, this, [this]() {
+            m_daqManager = nullptr;
+        });
         connect(m_daqManager, &DaqDeviceManager::statusTextChanged, this, [this]() {
             if (refreshDeviceState()) {
                 emit statusChanged();

@@ -9,6 +9,7 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import MangoComponent
 import BSSAS
+import BSSASSettingsStorage
 
 Item {
     id: root
@@ -369,11 +370,59 @@ Item {
 
                     RowLayout {
                         Layout.fillWidth: true
+                        Layout.preferredHeight: 50
+                        spacing: 10
+
+                        Text {
+                            text: "分析时间长度"
+                            font.pixelSize: 14
+                            color: Theme.textPrimary
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        Select {
+                            id: importAnalysisTimeLengthChoose
+
+                            Layout.preferredWidth: 170
+                            Layout.preferredHeight: 50
+                            font.family: Theme.fontFamily; font.pixelSize: Theme.fontBody; font.weight: Font.Normal
+                            currentIndex: AppState.analysisTimeLengthIndex(AppState.importAnalysisTimeLength)
+                            delegateHeight: 30
+                            visibleCount: 3
+                            popupPadding: 5
+                            showScrollIndicator: false
+                            textColor: Theme.textPrimary
+                            outlineColor: root.defaultBorderColor
+                            activeOutlineColor: root.themeBlue
+                            indicatorColor: root.themeBlue
+                            optionHighlightColor: root.colorWithAlpha(root.themeBlue, 0.12)
+                            popupColor: Theme.textWhite
+                            popupBorderColor: root.defaultBorderColor
+                            model: AppState.analysisTimeLengthLabels
+
+                            onCurrentIndexChanged: {
+                                const selectedValue = AppState.analysisTimeLengthValue(currentIndex)
+                                if (Math.abs(AppState.importAnalysisTimeLength - selectedValue) >= 0.0001)
+                                    AppState.importAnalysisTimeLength = selectedValue
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: 1
+                        radius: 0.5
+                        color: root.dividerColor
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
                         Layout.preferredHeight: 38
                         spacing: 10
 
                         Text {
-                            text: qsTr("\u6ee4\u6ce2\u5668\u7c7b\u578b")
+                            text: qsTr("带通滤波器类型")
                             font.pixelSize: 14
                             color: Theme.textPrimary
                         }
@@ -415,6 +464,60 @@ Item {
                             font.pixelSize: 14
                             font.bold: signalPreprocessing.importFirFilterEnabled
                             color: signalPreprocessing.importFirFilterEnabled
+                                ? root.themeBlue
+                                : root.colorWithAlpha(Theme.textPrimary, 0.62)
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 38
+                        spacing: 10
+
+                        Text {
+                            text: qsTr("陷波器配置")
+                            font.pixelSize: 14
+                            color: Theme.textPrimary
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        Text {
+                            Layout.alignment: Qt.AlignVCenter
+                            text: qsTr("固定频率")
+                            font.pixelSize: 14
+                            font.bold: signalPreprocessing.importNotchFrequencyMode === 0
+                            color: signalPreprocessing.importNotchFrequencyMode === 0
+                                ? root.themeBlue
+                                : root.colorWithAlpha(Theme.textPrimary, 0.62)
+                        }
+
+                        Item {
+                            Layout.alignment: Qt.AlignVCenter
+                            implicitWidth: importNotchFrequencyModeSwitch.implicitWidth
+                            implicitHeight: importNotchFrequencyModeSwitch.implicitHeight
+
+                            ToggleSwitch {
+                                id: importNotchFrequencyModeSwitch
+                                anchors.centerIn: parent
+                                checked: signalPreprocessing.importNotchFrequencyMode === 1
+                                interactive: false
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: signalPreprocessing.importNotchFrequencyMode =
+                                    signalPreprocessing.importNotchFrequencyMode === 1 ? 0 : 1
+                            }
+                        }
+
+                        Text {
+                            Layout.alignment: Qt.AlignVCenter
+                            text: qsTr("自适应")
+                            font.pixelSize: 14
+                            font.bold: signalPreprocessing.importNotchFrequencyMode === 1
+                            color: signalPreprocessing.importNotchFrequencyMode === 1
                                 ? root.themeBlue
                                 : root.colorWithAlpha(Theme.textPrimary, 0.62)
                         }

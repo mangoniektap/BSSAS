@@ -5,6 +5,7 @@
 import QtQuick
 import QtQuick.Controls
 import BSSAS
+import BSSASSettingsStorage
 import MangoComponent
 
 Window {
@@ -50,6 +51,18 @@ Window {
                 appToast.showSuccess(message)
             }
         }
+    }
+
+    Binding {
+        target: signalDFTCalculation
+        property: "realtimeAnalysisWindowSeconds"
+        value: AppState.normalizedAnalysisTimeLength(AppState.analysisTimeLength)
+    }
+
+    Binding {
+        target: signalDFTCalculation
+        property: "importAnalysisWindowSeconds"
+        value: AppState.normalizedAnalysisTimeLength(AppState.importAnalysisTimeLength)
     }
 
     Component.onCompleted: Qt.callLater(function() {

@@ -89,6 +89,9 @@ DaqDeviceManager::~DaqDeviceManager()
         m_thread->quit();
         m_thread->wait();
     }
+    if (m_instance == this) {
+        m_instance = nullptr;
+    }
 }
 void DaqDeviceManager::updateDataCache(const QVector<QVector<float>>& data)
 {

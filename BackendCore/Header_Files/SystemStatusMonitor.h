@@ -29,7 +29,7 @@ class SystemStatusMonitor : public QObject
     Q_PROPERTY(bool deviceConnected READ deviceConnected NOTIFY statusChanged)
 
 public:
-    explicit SystemStatusMonitor(QObject* parent = nullptr);
+    explicit SystemStatusMonitor(DaqDeviceManager* daqManager, QObject* parent = nullptr);
 
     /** @brief 获取存储使用百分比 @returns 0.0 ~ 100.0 */
     qreal storageUsagePercent() const;

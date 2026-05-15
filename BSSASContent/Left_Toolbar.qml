@@ -254,6 +254,7 @@ Item {
                 bottomMargin: 120
             }
             source: "qrc:/qt/qml/BSSASContent/image resources/home page/security_badge_banner.png"
+            sourceClipRect: Qt.rect(360, 0, 1328, 768)
             fillMode: Image.PreserveAspectFit
             smooth: true
             mipmap: true

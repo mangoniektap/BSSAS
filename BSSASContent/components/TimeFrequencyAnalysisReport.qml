@@ -180,9 +180,17 @@ Popup {
         lines.push("")
         lines.push("耗时")
 
-        const filterType = (processing.filterType || "").toString().trim()
-        if (filterType.length > 0) {
-            lines.push("\u6ee4\u6ce2\u5668\u7c7b\u578b\uff1a" + filterType)
+        const bandpassFilterType = (processing.bandpassFilterType || processing.filterType || "").toString().trim()
+        if (bandpassFilterType.length > 0) {
+            lines.push("带通滤波器类型：" + bandpassFilterType)
+        }
+        const bandpassFirOrder = root.numericValue(processing.bandpassFirOrder, -1)
+        if (bandpassFilterType === "FIR" && bandpassFirOrder > 0) {
+            lines.push("带通 FIR 阶数：" + bandpassFirOrder.toFixed(0))
+        }
+        const notchFrequencyMode = (processing.notchFrequencyMode || "").toString().trim()
+        if (notchFrequencyMode.length > 0) {
+            lines.push("陷波器配置：" + (notchFrequencyMode === "adaptive" ? "自适应" : "固定频率"))
         }
 
         const importReadMs = root.numericValue(timings.importReadMs, -1)

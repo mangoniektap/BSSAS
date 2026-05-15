@@ -1,6 +1,6 @@
 ﻿/**
  * @file Signal_Processing_Settings.qml
- * @brief 信号处理设置页面。配置降噪方式、增益调节、分析时间长度、滤波器类型及实时采集处理算法开关。
+ * @brief 信号处理设置页面。配置降噪方式、增益调节、分析时间长度、带通滤波器类型及实时采集处理算法开关。
  */
 import QtQuick
 import QtQuick.Controls
@@ -352,7 +352,7 @@ Item {
                 Layout.columnSpan: controlGrid.columns > 1 ? 2 : 1
                 spacing: 14
 
-                property string detailTipText: "系统会按照这里设置的时间长度，对肠鸣音频信号进行单次分析和处理。"
+                property string detailTipText: "实时 STFT 会按照这里设置的时间长度生成单帧频谱。"
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -544,7 +544,7 @@ Item {
                         Layout.preferredWidth: 170
                         Layout.preferredHeight: 50
                         font.family: Theme.fontFamily; font.pixelSize: Theme.fontBody; font.weight: Font.Normal
-                        currentIndex: 0
+                        currentIndex: AppState.analysisTimeLengthIndex(AppState.analysisTimeLength)
                         delegateHeight: 30
                         visibleCount: 3
                         popupPadding: 5
@@ -556,7 +556,13 @@ Item {
                         optionHighlightColor: root.colorWithAlpha(root.themeBlue, 0.12)
                         popupColor: Theme.textWhite
                         popupBorderColor: root.selectOutlineColor
-                        model: ["0.5秒", "1秒", "2秒", "5秒", "10秒", "30秒", "60秒"]
+                        model: AppState.analysisTimeLengthLabels
+
+                        onCurrentIndexChanged: {
+                            const selectedValue = AppState.analysisTimeLengthValue(currentIndex)
+                            if (Math.abs(AppState.analysisTimeLength - selectedValue) >= 0.0001)
+                                AppState.analysisTimeLength = selectedValue
+                        }
                     }
                 }
 
@@ -575,7 +581,7 @@ Item {
                 spacing: 10
 
                 Text {
-                    text: qsTr("\u6ee4\u6ce2\u5668\u7c7b\u578b")
+                    text: qsTr("带通滤波器类型")
                     font.pixelSize: 14
                     color: Theme.textPrimary
                 }
@@ -619,6 +625,63 @@ Item {
                     font.pixelSize: 14
                     font.bold: signalPreprocessing.realtimeFirFilterEnabled
                     color: signalPreprocessing.realtimeFirFilterEnabled
+                        ? root.themeBlue
+                        : root.colorWithAlpha(Theme.textPrimary, 0.62)
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.columnSpan: controlGrid.columns > 1 ? 2 : 1
+                Layout.preferredHeight: 38
+                spacing: 10
+
+                Text {
+                    text: qsTr("陷波器配置")
+                    font.pixelSize: 14
+                    color: Theme.textPrimary
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                Text {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: qsTr("固定频率")
+                    font.pixelSize: 14
+                    font.bold: signalPreprocessing.realtimeNotchFrequencyMode === 0
+                    color: signalPreprocessing.realtimeNotchFrequencyMode === 0
+                        ? root.themeBlue
+                        : root.colorWithAlpha(Theme.textPrimary, 0.62)
+                }
+
+                Item {
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitWidth: realtimeNotchFrequencyModeSwitch.implicitWidth
+                    implicitHeight: realtimeNotchFrequencyModeSwitch.implicitHeight
+
+                    ToggleSwitch {
+                        id: realtimeNotchFrequencyModeSwitch
+                        anchors.centerIn: parent
+                        checked: signalPreprocessing.realtimeNotchFrequencyMode === 1
+                        interactive: false
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: signalPreprocessing.realtimeNotchFrequencyMode =
+                            signalPreprocessing.realtimeNotchFrequencyMode === 1 ? 0 : 1
+                    }
+                }
+
+                Text {
+                    Layout.alignment: Qt.AlignVCenter
+                    text: qsTr("自适应")
+                    font.pixelSize: 14
+                    font.bold: signalPreprocessing.realtimeNotchFrequencyMode === 1
+                    color: signalPreprocessing.realtimeNotchFrequencyMode === 1
                         ? root.themeBlue
                         : root.colorWithAlpha(Theme.textPrimary, 0.62)
                 }

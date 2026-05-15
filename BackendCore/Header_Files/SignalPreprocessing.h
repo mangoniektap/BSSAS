@@ -11,6 +11,7 @@
 #include <QObject>
 #include <QVector>
 #include <array>
+#include <memory>
 
 #include "ActiveNoiseCancellation.h"
 #include "AdaptiveNoiseReduction.h"
@@ -22,11 +23,18 @@
 class QThread;
 class QTimer;
 
+enum NotchFrequencyMode
+{
+    NotchFrequencyFixed = 0,
+    NotchFrequencyAdaptive = 1
+};
+
 /** @brief 信号预处理选项，集中管理各类预处理开关与增益配置。 */
 struct SignalPreprocessOptions
 {
     bool bandpassEnabled = true;                  /**< 带通滤波是否启用 */
     bool notchEnabled = true;                     /**< 陷波滤波是否启用 */
+    int notchFrequencyMode = NotchFrequencyFixed; /**< 陷波中心频率模式 */
     bool firFilterEnabled = false;                /**< FIR 滤波是否启用 */
     bool activeNoiseCancellationEnabled = true;   /**< 主动降噪 (ANC) 是否启用 */
     bool adaptiveNoiseReductionEnabled = true;    /**< 自适应降噪 (ANR) 是否启用 */
@@ -34,6 +42,18 @@ struct SignalPreprocessOptions
     bool transientNoiseSuppressionEnabled = true; /**< 瞬态噪声抑制是否启用 */
     bool motionArtifactReductionEnabled = true;   /**< 运动伪影削减是否启用 */
     double gain = 1.0;                            /**< 增益系数 */
+};
+
+/** @brief 预滤波流式状态，分别保存带通、陷波和自适应频率跟踪。 */
+struct SignalPreFilterState
+{
+    kfr::iir_state<double, 5> bandpassState{ kfr::iir_params<double, 5>() };
+    std::unique_ptr<kfr::fir_state<double, double>> bandpassFirState;
+    int bandpassFirOrder = 0;
+    kfr::iir_state<double, 5> notchState{ kfr::iir_params<double, 5>() };
+    QVector<float> adaptiveNotchHistory;
+    std::array<double, 3> adaptiveNotchFrequencies{};
+    std::array<int, 3> adaptiveNotchMissedFrames{};
 };
 
 /** @brief 预处理工作线程，负责实时信号的逐帧采集与多级降噪处理。 */
@@ -60,18 +80,13 @@ signals:
     void resultReady(const QVector<float>& preprocessedData, int processingSession);
 
 private:
-    /** @brief 实时预滤波器 IIR 状态 */
-    struct RealtimePreFilterState
-    {
-        kfr::iir_state<double, 5> state{ kfr::iir_params<double, 5>() };
-    };
-
     /** @brief 重置实时 ANC 状态 */
     void resetRealtimeAncStates();
     /** @brief 重置实时降噪状态 */
     void resetRealtimeDenoiseStates();
     /** @brief 初始化预滤波器 @param sampleRate 采样率 @param options 预处理选项 */
     void initPreFilter(int sampleRate, const SignalPreprocessOptions& options);
+    bool m_preFilterBandpassFirFilterEnabled = false;
 
     QMutex m_dataMutex;                                                                 /**< 数据互斥锁 */
     int m_currentChannel = 0;                                                           /**< 当前通道号 */
@@ -79,8 +94,10 @@ private:
     int m_preFilterSampleRate = 0;                                                      /**< 预滤波器采样率 */
     bool m_preFilterBandpassEnabled = true;                                             /**< 预滤波带通开关 */
     bool m_preFilterNotchEnabled = true;                                                /**< 预滤波陷波开关 */
-    bool m_hasPreFilterState = false;                                                   /**< 是否已有预滤波状态 */
-    std::array<RealtimePreFilterState, 8> m_preFilterStates{};                          /**< 8通道预滤波器状态 */
+    int m_preFilterNotchFrequencyMode = NotchFrequencyFixed;                            /**< 预滤波陷波频率模式 */
+    bool m_hasBandpassFilterState = false;                                              /**< 是否已有带通滤波状态 */
+    bool m_hasNotchFilterState = false;                                                 /**< 是否已有陷波滤波状态 */
+    std::array<SignalPreFilterState, 8> m_preFilterStates{};                            /**< 8通道预滤波器状态 */
     std::array<AdaptiveNoiseReduction::StreamingState, 8> m_realtimeAdaptiveStates{};   /**< 8通道自适应降噪流式状态 */
     std::array<ActiveNoiseCancellation::StreamingState, 8> m_realtimeAncStates{};       /**< 8通道 ANC 流式状态 */
     int m_realtimeDenoiseSampleRate = 0;                                                /**< 实时降噪采样率 */
@@ -116,6 +133,12 @@ class SignalPreprocessing : public QObject
         READ importNotchEnabled
         WRITE setImportNotchEnabled
         NOTIFY importNotchEnabledChanged)
+    /** @brief 导入模式陷波中心频率模式 */
+    Q_PROPERTY(
+        int importNotchFrequencyMode
+        READ importNotchFrequencyMode
+        WRITE setImportNotchFrequencyMode
+        NOTIFY importNotchFrequencyModeChanged)
     /** @brief 导入模式自适应降噪是否启用 */
     Q_PROPERTY(
         bool importAdaptiveNoiseReductionEnabled
@@ -163,6 +186,12 @@ class SignalPreprocessing : public QObject
         READ realtimeNotchEnabled
         WRITE setRealtimeNotchEnabled
         NOTIFY realtimeNotchEnabledChanged)
+    /** @brief 实时模式陷波中心频率模式 */
+    Q_PROPERTY(
+        int realtimeNotchFrequencyMode
+        READ realtimeNotchFrequencyMode
+        WRITE setRealtimeNotchFrequencyMode
+        NOTIFY realtimeNotchFrequencyModeChanged)
     /** @brief 实时模式主动降噪是否启用 */
     Q_PROPERTY(
         bool realtimeActiveNoiseCancellationEnabled
@@ -234,6 +263,7 @@ public:
     bool importAllProcessingEnabled() const;
     bool importBandpassEnabled() const;
     bool importNotchEnabled() const;
+    int importNotchFrequencyMode() const;
     bool importAdaptiveNoiseReductionEnabled() const;
     bool importWaveletDenoisingEnabled() const;
     bool importTransientNoiseSuppressionEnabled() const;
@@ -243,6 +273,7 @@ public:
     bool realtimeAllProcessingEnabled() const;
     bool realtimeBandpassEnabled() const;
     bool realtimeNotchEnabled() const;
+    int realtimeNotchFrequencyMode() const;
     bool realtimeActiveNoiseCancellationEnabled() const;
     bool realtimeAdaptiveNoiseReductionEnabled() const;
     bool realtimeWaveletDenoisingEnabled() const;
@@ -261,6 +292,8 @@ public:
     void setImportBandpassEnabled(bool enabled);
     /** @brief 设置导入模式陷波滤波 @param enabled 是否启用 */
     void setImportNotchEnabled(bool enabled);
+    /** @brief 设置导入模式陷波中心频率模式 @param mode 频率模式 */
+    void setImportNotchFrequencyMode(int mode);
     /** @brief 设置导入模式自适应降噪 @param enabled 是否启用 */
     void setImportAdaptiveNoiseReductionEnabled(bool enabled);
     /** @brief 设置导入模式小波去噪 @param enabled 是否启用 */
@@ -275,6 +308,8 @@ public:
     void setRealtimeBandpassEnabled(bool enabled);
     /** @brief 设置实时模式陷波滤波 @param enabled 是否启用 */
     void setRealtimeNotchEnabled(bool enabled);
+    /** @brief 设置实时模式陷波中心频率模式 @param mode 频率模式 */
+    void setRealtimeNotchFrequencyMode(int mode);
     /** @brief 设置实时模式主动降噪 @param enabled 是否启用 */
     void setRealtimeActiveNoiseCancellationEnabled(bool enabled);
     /** @brief 设置实时模式自适应降噪 @param enabled 是否启用 */
@@ -324,6 +359,7 @@ private:
     mutable QMutex m_realtimeSettingsMutex;                  /**< 实时设置互斥锁 */
     bool m_importBandpassEnabled = true;                     /**< 导入: 带通滤波开关 */
     bool m_importNotchEnabled = true;                        /**< 导入: 陷波滤波开关 */
+    int m_importNotchFrequencyMode = NotchFrequencyFixed;    /**< 导入: 陷波中心频率模式 */
     bool m_importAdaptiveNoiseReductionEnabled = true;       /**< 导入: 自适应降噪开关 */
     bool m_importWaveletDenoisingEnabled = true;             /**< 导入: 小波去噪开关 */
     bool m_importTransientNoiseSuppressionEnabled = true;    /**< 导入: 瞬态噪声抑制开关 */
@@ -331,6 +367,7 @@ private:
     bool m_importFirFilterEnabled = false;                   /**< 导入: FIR 滤波开关 */
     bool m_realtimeBandpassEnabled = true;                   /**< 实时: 带通滤波开关 */
     bool m_realtimeNotchEnabled = true;                      /**< 实时: 陷波滤波开关 */
+    int m_realtimeNotchFrequencyMode = NotchFrequencyFixed;  /**< 实时: 陷波中心频率模式 */
     bool m_realtimeActiveNoiseCancellationEnabled = true;    /**< 实时: 主动降噪开关 */
     bool m_realtimeAdaptiveNoiseReductionEnabled = true;     /**< 实时: 自适应降噪开关 */
     bool m_realtimeWaveletDenoisingEnabled = true;           /**< 实时: 小波去噪开关 */
@@ -348,6 +385,8 @@ signals:
     void importBandpassEnabledChanged();
     /** @brief 导入陷波滤波开关变化信号 */
     void importNotchEnabledChanged();
+    /** @brief 导入陷波中心频率模式变化信号 */
+    void importNotchFrequencyModeChanged();
     /** @brief 导入自适应降噪开关变化信号 */
     void importAdaptiveNoiseReductionEnabledChanged();
     /** @brief 导入小波去噪开关变化信号 */
@@ -364,6 +403,8 @@ signals:
     void realtimeBandpassEnabledChanged();
     /** @brief 实时陷波滤波开关变化信号 */
     void realtimeNotchEnabledChanged();
+    /** @brief 实时陷波中心频率模式变化信号 */
+    void realtimeNotchFrequencyModeChanged();
     /** @brief 实时主动降噪开关变化信号 */
     void realtimeActiveNoiseCancellationEnabledChanged();
     /** @brief 实时自适应降噪开关变化信号 */

@@ -39,6 +39,35 @@ constexpr int kRealtimeReferenceNoiseChannel = 7;
 constexpr int kAncDebugLogEveryFrames = 10;
 constexpr double kMinimumRmsForDb = 1e-12;
 constexpr size_t kPreFilterSectionCount = 5;
+constexpr int kNativeBandpassOrder = 4;
+constexpr int kMinimumFirBandpassOrder = 128;
+constexpr int kMaximumFirBandpassOrder = 8192;
+constexpr double kFirBandpassImpulseSeconds = 0.12;
+constexpr double kFirBandpassTailEnergyRatio = 1e-5;
+constexpr int kPowerlineNotchCount = 3;
+constexpr double kPi = 3.14159265358979323846;
+constexpr double kAdaptiveNotchWindowSeconds = 1.0;
+constexpr double kAdaptiveNotchFrameSeconds = 0.1;
+constexpr double kAdaptiveNotchSearchHalfWidthHz = 1.0;
+constexpr double kAdaptiveNotchSearchStepHz = 0.1;
+constexpr double kAdaptiveNotchGuardRatio = 1.9952623149688795; // 6 dB amplitude ratio.
+constexpr double kAdaptiveNotchTrackingAlpha = 0.2;
+constexpr double kAdaptiveNotchReturnAlpha = 0.05;
+constexpr double kAdaptiveNotchMaxStepHz = 0.2;
+constexpr int kAdaptiveNotchReturnAfterMissedFrames = 10;
+constexpr double kMinimumAdaptiveNotchMagnitude = 1e-12;
+constexpr int kAdaptiveNotchMaxDetectionSampleRate = 12000;
+constexpr std::array<double, kPowerlineNotchCount> kPowerlineFrequenciesHz{
+    kPowerlineFundamentalHz,
+    kPowerlineSecondHarmonicHz,
+    kPowerlineThirdHarmonicHz
+};
+constexpr std::array<double, kPowerlineNotchCount> kPowerlineQFactors{
+    kPowerlineFundamentalQFactor,
+    kPowerlineSecondHarmonicQFactor,
+    kPowerlineThirdHarmonicQFactor
+};
+constexpr std::array<double, 4> kAdaptiveNotchGuardOffsetsHz{ -3.0, -2.0, 2.0, 3.0 };
 
 struct PreFilterDesign
 {
@@ -53,6 +82,21 @@ struct PreFilterDesign
     kfr::iir_params<double, 5> params() const
     {
         return kfr::iir_params<double, 5>{ sections.data(), sectionCount };
+    }
+};
+
+struct FirBandpassDesign
+{
+    kfr::univector<double> taps;
+
+    bool hasTaps() const
+    {
+        return !taps.empty();
+    }
+
+    int order() const
+    {
+        return hasTaps() ? static_cast<int>(taps.size()) - 1 : 0;
     }
 };
 
@@ -72,6 +116,18 @@ bool isFrequencyWithinNyquist(double frequencyHz, int samplingRate)
     return static_cast<double>(samplingRate) > 2.0 * frequencyHz;
 }
 
+int normalizeNotchFrequencyMode(int mode)
+{
+    return mode == NotchFrequencyAdaptive
+        ? NotchFrequencyAdaptive
+        : NotchFrequencyFixed;
+}
+
+std::array<double, kPowerlineNotchCount> fixedPowerlineFrequencies()
+{
+    return kPowerlineFrequenciesHz;
+}
+
 void appendPowerlineNotchSection(
     std::array<kfr::biquad_section<double>, kPreFilterSectionCount>& sections,
     size_t& sectionCount,
@@ -87,6 +143,153 @@ void appendPowerlineNotchSection(
     sections[sectionCount++] = kfr::biquad_notch(normalizedFrequency, qFactor);
 }
 
+void appendNativeBandpassSections(
+    PreFilterDesign& design,
+    double lowCutoffHz,
+    double highCutoffHz,
+    double sampleRateHz)
+{
+    const kfr::iir_params<double> bandpassSections =
+        kfr::to_sos<double>(kfr::iir_bandpass(
+            // KFR doubles the low-pass prototype order when transforming to band-pass.
+            kfr::butterworth(kNativeBandpassOrder / 2),
+            lowCutoffHz,
+            highCutoffHz,
+            sampleRateHz));
+
+    for (const kfr::biquad_section<double>& section : bandpassSections) {
+        if (design.sectionCount >= design.sections.size()) {
+            qWarning() << "SignalPreprocessing: native bandpass section count exceeds capacity";
+            break;
+        }
+
+        design.sections[design.sectionCount++] = section;
+    }
+}
+
+PreFilterDesign makeBandpassFilterDesign(int sampleRate, bool enabled)
+{
+    PreFilterDesign design{};
+    const double sampleRateHz = static_cast<double>(sampleRate);
+    const double nyquistHz = sampleRateHz / 2.0;
+    if (enabled &&
+        isFrequencyWithinNyquist(kLowCutoffHz + kMinimumCutoffGapHz, sampleRate)) {
+        const double effectiveHighCutoffHz =
+            std::min(kHighCutoffHz, nyquistHz - kMinimumCutoffGapHz);
+        if (effectiveHighCutoffHz > kLowCutoffHz) {
+            appendNativeBandpassSections(
+                design,
+                kLowCutoffHz,
+                effectiveHighCutoffHz,
+                sampleRateHz);
+        }
+    }
+
+    return design;
+}
+
+int maximumFirBandpassTapCount(int sampleRate)
+{
+    const int tapsByImpulseDuration = static_cast<int>(
+        std::round(static_cast<double>(sampleRate) * kFirBandpassImpulseSeconds));
+    return std::clamp(
+        tapsByImpulseDuration,
+        kMinimumFirBandpassOrder + 1,
+        kMaximumFirBandpassOrder + 1);
+}
+
+size_t selectFirBandpassTapCount(const kfr::univector<double>& impulseResponse)
+{
+    if (impulseResponse.empty()) {
+        return 0;
+    }
+
+    const size_t minimumTapCount = std::min(
+        impulseResponse.size(),
+        static_cast<size_t>(kMinimumFirBandpassOrder + 1));
+
+    double totalEnergy = 0.0;
+    for (double sample : impulseResponse) {
+        totalEnergy += sample * sample;
+    }
+    if (totalEnergy <= 0.0 || !std::isfinite(totalEnergy)) {
+        return minimumTapCount;
+    }
+
+    double tailEnergy = totalEnergy;
+    for (size_t index = 0; index < impulseResponse.size(); ++index) {
+        tailEnergy -= impulseResponse[index] * impulseResponse[index];
+        const size_t tapCount = index + 1;
+        if (tapCount >= minimumTapCount &&
+            tailEnergy <= totalEnergy * kFirBandpassTailEnergyRatio) {
+            return tapCount;
+        }
+    }
+
+    return impulseResponse.size();
+}
+
+FirBandpassDesign makeFirBandpassFilterDesign(int sampleRate, bool enabled)
+{
+    FirBandpassDesign design{};
+    if (!enabled) {
+        return design;
+    }
+
+    const PreFilterDesign iirDesign = makeBandpassFilterDesign(sampleRate, true);
+    if (!iirDesign.hasSections()) {
+        return design;
+    }
+
+    const int maximumTapCount = maximumFirBandpassTapCount(sampleRate);
+    kfr::univector<double> impulse(static_cast<size_t>(maximumTapCount));
+    for (size_t index = 0; index < impulse.size(); ++index) {
+        impulse[index] = index == 0 ? 1.0 : 0.0;
+    }
+
+    kfr::univector<double> impulseResponse(static_cast<size_t>(maximumTapCount));
+    kfr::iir_state<double, 5> impulseState{ iirDesign.params() };
+    kfr::process(impulseResponse, kfr::iir(impulse, std::ref(impulseState)));
+
+    const size_t selectedTapCount = selectFirBandpassTapCount(impulseResponse);
+    if (selectedTapCount == 0) {
+        return design;
+    }
+
+    design.taps = kfr::univector<double>(selectedTapCount);
+    for (size_t index = 0; index < selectedTapCount; ++index) {
+        design.taps[index] = impulseResponse[index];
+    }
+
+    return design;
+}
+
+PreFilterDesign makeNotchFilterDesign(
+    int sampleRate,
+    bool enabled,
+    const std::array<double, kPowerlineNotchCount>& frequenciesHz)
+{
+    PreFilterDesign design{};
+    if (!enabled) {
+        return design;
+    }
+
+    const double sampleRateHz = static_cast<double>(sampleRate);
+    for (int index = 0; index < kPowerlineNotchCount; ++index) {
+        const double centerFrequencyHz = frequenciesHz[static_cast<size_t>(index)];
+        if (isFrequencyWithinNyquist(centerFrequencyHz + kMinimumCutoffGapHz, sampleRate)) {
+            appendPowerlineNotchSection(
+                design.sections,
+                design.sectionCount,
+                centerFrequencyHz,
+                kPowerlineQFactors[static_cast<size_t>(index)],
+                sampleRateHz);
+        }
+    }
+
+    return design;
+}
+
 PreFilterDesign makePreFilterDesign(
     int sampleRate,
     const SignalPreprocessOptions& options)
@@ -99,14 +302,11 @@ PreFilterDesign makePreFilterDesign(
         const double effectiveHighCutoffHz =
             std::min(kHighCutoffHz, nyquistHz - kMinimumCutoffGapHz);
         if (effectiveHighCutoffHz > kLowCutoffHz) {
-            const double qButterworth = 0.7071067811865476;
-            const double normalizedLowCutoff = kLowCutoffHz / sampleRateHz;
-            const double normalizedHighCutoff = effectiveHighCutoffHz / sampleRateHz;
-
-            design.sections[design.sectionCount++] =
-                kfr::biquad_highpass(normalizedLowCutoff, qButterworth);
-            design.sections[design.sectionCount++] =
-                kfr::biquad_lowpass(normalizedHighCutoff, qButterworth);
+            appendNativeBandpassSections(
+                design,
+                kLowCutoffHz,
+                effectiveHighCutoffHz,
+                sampleRateHz);
         }
     }
 
@@ -171,6 +371,34 @@ QVector<float> applyIirPreFilter(
     return filteredData;
 }
 
+QVector<float> applyFirPreFilter(
+    const QVector<float>& rawData,
+    kfr::fir_state<double, double>& filterState)
+{
+    if (rawData.isEmpty()) {
+        return {};
+    }
+
+    kfr::univector<double> inputDouble(static_cast<size_t>(rawData.size()));
+    std::transform(
+        rawData.cbegin(),
+        rawData.cend(),
+        inputDouble.begin(),
+        [](float value) { return static_cast<double>(value); });
+
+    kfr::univector<double> outputDouble(static_cast<size_t>(rawData.size()));
+    kfr::process(outputDouble, kfr::fir(inputDouble, std::ref(filterState)));
+
+    QVector<float> filteredData(rawData.size());
+    std::transform(
+        outputDouble.begin(),
+        outputDouble.end(),
+        filteredData.begin(),
+        [](double value) { return static_cast<float>(value); });
+
+    return filteredData;
+}
+
 QVector<float> applyPreFilterDesign(
     const QVector<float>& rawData,
     const PreFilterDesign& design)
@@ -183,33 +411,490 @@ QVector<float> applyPreFilterDesign(
     return applyIirPreFilter(rawData, filterState);
 }
 
-QVector<float> applyRealtimePreFilter(
+void resetAdaptiveNotchTracking(SignalPreFilterState& state)
+{
+    state.adaptiveNotchHistory.clear();
+    state.adaptiveNotchFrequencies = fixedPowerlineFrequencies();
+    state.adaptiveNotchMissedFrames.fill(0);
+}
+
+void initializePreFilterState(
+    SignalPreFilterState& state,
+    const PreFilterDesign& bandpassDesign,
+    const FirBandpassDesign& firBandpassDesign,
+    bool useFirBandpass,
+    const PreFilterDesign& notchDesign)
+{
+    state.bandpassState = !useFirBandpass && bandpassDesign.hasSections()
+        ? kfr::iir_state<double, 5>{ bandpassDesign.params() }
+        : kfr::iir_state<double, 5>{ kfr::iir_params<double, 5>() };
+    state.bandpassFirState = useFirBandpass && firBandpassDesign.hasTaps()
+        ? std::make_unique<kfr::fir_state<double, double>>(
+              kfr::fir_params<double>{ firBandpassDesign.taps })
+        : nullptr;
+    state.bandpassFirOrder = useFirBandpass ? firBandpassDesign.order() : 0;
+    state.notchState = notchDesign.hasSections()
+        ? kfr::iir_state<double, 5>{ notchDesign.params() }
+        : kfr::iir_state<double, 5>{ kfr::iir_params<double, 5>() };
+    resetAdaptiveNotchTracking(state);
+}
+
+void initializePreFilterState(
+    SignalPreFilterState& state,
+    int sampleRate,
+    const SignalPreprocessOptions& options,
+    bool* hasBandpassFilterState = nullptr,
+    bool* hasNotchFilterState = nullptr)
+{
+    const PreFilterDesign bandpassDesign =
+        makeBandpassFilterDesign(sampleRate, options.bandpassEnabled);
+    const FirBandpassDesign firBandpassDesign =
+        makeFirBandpassFilterDesign(
+            sampleRate,
+            options.bandpassEnabled && options.firFilterEnabled);
+    const PreFilterDesign notchDesign =
+        makeNotchFilterDesign(sampleRate, options.notchEnabled, fixedPowerlineFrequencies());
+
+    if (hasBandpassFilterState != nullptr) {
+        *hasBandpassFilterState = options.firFilterEnabled
+            ? firBandpassDesign.hasTaps()
+            : bandpassDesign.hasSections();
+    }
+    if (hasNotchFilterState != nullptr) {
+        *hasNotchFilterState = notchDesign.hasSections();
+    }
+
+    initializePreFilterState(
+        state,
+        bandpassDesign,
+        firBandpassDesign,
+        options.firFilterEnabled,
+        notchDesign);
+}
+
+QVector<float> applyBandpassFilterFrame(
     const QVector<float>& rawData,
     int sampleRate,
     const SignalPreprocessOptions& options,
-    kfr::iir_state<double, 5>* filterState = nullptr,
-    bool hasFilterState = false)
+    SignalPreFilterState* filterState,
+    bool hasBandpassFilterState)
+{
+    if (rawData.isEmpty() || !options.bandpassEnabled) {
+        return rawData;
+    }
+
+    if (options.firFilterEnabled) {
+        if (filterState != nullptr &&
+            hasBandpassFilterState &&
+            filterState->bandpassFirState != nullptr) {
+            return applyFirPreFilter(rawData, *filterState->bandpassFirState);
+        }
+
+        const FirBandpassDesign firBandpassDesign =
+            makeFirBandpassFilterDesign(sampleRate, true);
+        if (!firBandpassDesign.hasTaps()) {
+            return rawData;
+        }
+
+        kfr::fir_state<double, double> temporaryState{
+            kfr::fir_params<double>{ firBandpassDesign.taps }
+        };
+        return applyFirPreFilter(rawData, temporaryState);
+    }
+
+    const PreFilterDesign bandpassDesign =
+        makeBandpassFilterDesign(sampleRate, options.bandpassEnabled);
+    if (!bandpassDesign.hasSections()) {
+        return rawData;
+    }
+
+    if (filterState != nullptr && hasBandpassFilterState) {
+        return applyIirPreFilter(rawData, filterState->bandpassState);
+    }
+
+    kfr::iir_state<double, 5> temporaryState{ bandpassDesign.params() };
+    return applyIirPreFilter(rawData, temporaryState);
+}
+
+int adaptiveNotchHistorySampleCount(int sampleRate)
+{
+    return std::max(
+        1,
+        static_cast<int>(std::round(static_cast<double>(sampleRate) * kAdaptiveNotchWindowSeconds)));
+}
+
+void appendAdaptiveNotchHistory(
+    SignalPreFilterState& state,
+    const QVector<float>& frameData,
+    int sampleRate)
+{
+    const int maximumHistorySize = adaptiveNotchHistorySampleCount(sampleRate);
+    state.adaptiveNotchHistory.reserve(maximumHistorySize + frameData.size());
+    for (float sample : frameData) {
+        state.adaptiveNotchHistory.append(sample);
+    }
+
+    const int excessSampleCount = state.adaptiveNotchHistory.size() - maximumHistorySize;
+    if (excessSampleCount > 0) {
+        state.adaptiveNotchHistory.erase(
+            state.adaptiveNotchHistory.begin(),
+            state.adaptiveNotchHistory.begin() + excessSampleCount);
+    }
+}
+
+QVector<double> buildAdaptiveNotchDetectionWindow(
+    const QVector<float>& history,
+    int sampleRate,
+    double& detectionSampleRate)
+{
+    const int decimationStride = std::max(
+        1,
+        static_cast<int>(
+            std::ceil(static_cast<double>(sampleRate) /
+                      static_cast<double>(kAdaptiveNotchMaxDetectionSampleRate))));
+    detectionSampleRate = static_cast<double>(sampleRate) /
+        static_cast<double>(decimationStride);
+
+    QVector<double> decimatedSamples;
+    decimatedSamples.reserve((history.size() + decimationStride - 1) / decimationStride);
+    double mean = 0.0;
+    int finiteSampleCount = 0;
+    for (int index = 0; index < history.size(); index += decimationStride) {
+        const double sample = std::isfinite(history[index])
+            ? static_cast<double>(history[index])
+            : 0.0;
+        decimatedSamples.append(sample);
+        mean += sample;
+        ++finiteSampleCount;
+    }
+
+    if (finiteSampleCount > 0) {
+        mean /= static_cast<double>(finiteSampleCount);
+    }
+
+    const int sampleCount = decimatedSamples.size();
+    for (int index = 0; index < sampleCount; ++index) {
+        const double window = sampleCount > 1
+            ? 0.5 * (1.0 - std::cos((2.0 * kPi * static_cast<double>(index)) /
+                                    static_cast<double>(sampleCount - 1)))
+            : 1.0;
+        decimatedSamples[index] = (decimatedSamples[index] - mean) * window;
+    }
+
+    return decimatedSamples;
+}
+
+double goertzelMagnitude(
+    const QVector<double>& windowedSamples,
+    double sampleRate,
+    double frequencyHz)
+{
+    if (windowedSamples.isEmpty() ||
+        sampleRate <= 0.0 ||
+        frequencyHz <= 0.0 ||
+        frequencyHz >= sampleRate / 2.0) {
+        return 0.0;
+    }
+
+    const double omega = 2.0 * kPi * frequencyHz / sampleRate;
+    const double coefficient = 2.0 * std::cos(omega);
+    double q0 = 0.0;
+    double q1 = 0.0;
+    double q2 = 0.0;
+    for (double sample : windowedSamples) {
+        q0 = coefficient * q1 - q2 + sample;
+        q2 = q1;
+        q1 = q0;
+    }
+
+    const double real = q1 - q2 * std::cos(omega);
+    const double imag = q2 * std::sin(omega);
+    return std::hypot(real, imag);
+}
+
+struct AdaptiveNotchPeak
+{
+    bool valid = false;
+    double frequencyHz = 0.0;
+};
+
+AdaptiveNotchPeak findAdaptiveNotchPeak(
+    const QVector<double>& windowedSamples,
+    double sampleRate,
+    double nominalFrequencyHz)
+{
+    AdaptiveNotchPeak peak{};
+    double bestMagnitude = 0.0;
+    for (double frequencyHz = nominalFrequencyHz - kAdaptiveNotchSearchHalfWidthHz;
+         frequencyHz <= nominalFrequencyHz + kAdaptiveNotchSearchHalfWidthHz + 0.0001;
+         frequencyHz += kAdaptiveNotchSearchStepHz) {
+        if (frequencyHz <= 0.0 || frequencyHz >= sampleRate / 2.0) {
+            continue;
+        }
+
+        const double magnitude = goertzelMagnitude(windowedSamples, sampleRate, frequencyHz);
+        if (magnitude > bestMagnitude) {
+            bestMagnitude = magnitude;
+            peak.frequencyHz = frequencyHz;
+        }
+    }
+
+    double guardMagnitudeSum = 0.0;
+    int guardMagnitudeCount = 0;
+    for (double offsetHz : kAdaptiveNotchGuardOffsetsHz) {
+        const double guardFrequencyHz = nominalFrequencyHz + offsetHz;
+        if (guardFrequencyHz <= 0.0 || guardFrequencyHz >= sampleRate / 2.0) {
+            continue;
+        }
+
+        guardMagnitudeSum += goertzelMagnitude(windowedSamples, sampleRate, guardFrequencyHz);
+        ++guardMagnitudeCount;
+    }
+
+    if (guardMagnitudeCount <= 0) {
+        return peak;
+    }
+
+    const double guardMagnitude =
+        guardMagnitudeSum / static_cast<double>(guardMagnitudeCount);
+    peak.valid =
+        bestMagnitude > kMinimumAdaptiveNotchMagnitude &&
+        bestMagnitude >= std::max(guardMagnitude, kMinimumAdaptiveNotchMagnitude) *
+            kAdaptiveNotchGuardRatio;
+    return peak;
+}
+
+double moveTrackedFrequency(
+    double currentFrequencyHz,
+    double targetFrequencyHz,
+    double nominalFrequencyHz,
+    double alpha)
+{
+    if (!std::isfinite(currentFrequencyHz)) {
+        currentFrequencyHz = nominalFrequencyHz;
+    }
+
+    const double proposedFrequencyHz =
+        currentFrequencyHz + alpha * (targetFrequencyHz - currentFrequencyHz);
+    const double deltaHz = std::clamp(
+        proposedFrequencyHz - currentFrequencyHz,
+        -kAdaptiveNotchMaxStepHz,
+        kAdaptiveNotchMaxStepHz);
+    return std::clamp(
+        currentFrequencyHz + deltaHz,
+        nominalFrequencyHz - kAdaptiveNotchSearchHalfWidthHz,
+        nominalFrequencyHz + kAdaptiveNotchSearchHalfWidthHz);
+}
+
+void updateAdaptiveNotchFrequencies(
+    SignalPreFilterState& state,
+    const QVector<float>& preNotchData,
+    int sampleRate)
+{
+    appendAdaptiveNotchHistory(state, preNotchData, sampleRate);
+    if (state.adaptiveNotchHistory.size() < adaptiveNotchHistorySampleCount(sampleRate)) {
+        return;
+    }
+
+    double detectionSampleRate = static_cast<double>(sampleRate);
+    const QVector<double> windowedSamples =
+        buildAdaptiveNotchDetectionWindow(
+            state.adaptiveNotchHistory,
+            sampleRate,
+            detectionSampleRate);
+    for (int index = 0; index < kPowerlineNotchCount; ++index) {
+        const double nominalFrequencyHz = kPowerlineFrequenciesHz[static_cast<size_t>(index)];
+        if (!isFrequencyWithinNyquist(
+                nominalFrequencyHz + kAdaptiveNotchSearchHalfWidthHz,
+                sampleRate)) {
+            state.adaptiveNotchFrequencies[static_cast<size_t>(index)] = nominalFrequencyHz;
+            state.adaptiveNotchMissedFrames[static_cast<size_t>(index)] = 0;
+            continue;
+        }
+
+        const AdaptiveNotchPeak peak =
+            findAdaptiveNotchPeak(windowedSamples, detectionSampleRate, nominalFrequencyHz);
+        if (peak.valid) {
+            state.adaptiveNotchMissedFrames[static_cast<size_t>(index)] = 0;
+            state.adaptiveNotchFrequencies[static_cast<size_t>(index)] =
+                moveTrackedFrequency(
+                    state.adaptiveNotchFrequencies[static_cast<size_t>(index)],
+                    peak.frequencyHz,
+                    nominalFrequencyHz,
+                    kAdaptiveNotchTrackingAlpha);
+            continue;
+        }
+
+        ++state.adaptiveNotchMissedFrames[static_cast<size_t>(index)];
+        if (state.adaptiveNotchMissedFrames[static_cast<size_t>(index)] >=
+            kAdaptiveNotchReturnAfterMissedFrames) {
+            state.adaptiveNotchFrequencies[static_cast<size_t>(index)] =
+                moveTrackedFrequency(
+                    state.adaptiveNotchFrequencies[static_cast<size_t>(index)],
+                    nominalFrequencyHz,
+                    nominalFrequencyHz,
+                    kAdaptiveNotchReturnAlpha);
+        }
+    }
+}
+
+QVector<float> applyNotchFilterFrame(
+    const QVector<float>& preNotchData,
+    int sampleRate,
+    const SignalPreprocessOptions& options,
+    SignalPreFilterState* filterState,
+    bool hasNotchFilterState)
+{
+    if (preNotchData.isEmpty() || !options.notchEnabled) {
+        return preNotchData;
+    }
+
+    const bool adaptiveMode =
+        normalizeNotchFrequencyMode(options.notchFrequencyMode) == NotchFrequencyAdaptive;
+    if (adaptiveMode) {
+        if (filterState == nullptr) {
+            const PreFilterDesign notchDesign =
+                makeNotchFilterDesign(sampleRate, true, fixedPowerlineFrequencies());
+            return applyPreFilterDesign(preNotchData, notchDesign);
+        }
+
+        updateAdaptiveNotchFrequencies(*filterState, preNotchData, sampleRate);
+        const PreFilterDesign notchDesign =
+            makeNotchFilterDesign(sampleRate, true, filterState->adaptiveNotchFrequencies);
+        if (!notchDesign.hasSections()) {
+            return preNotchData;
+        }
+
+        filterState->notchState.params = notchDesign.params();
+        return applyIirPreFilter(preNotchData, filterState->notchState);
+    }
+
+    const PreFilterDesign notchDesign =
+        makeNotchFilterDesign(sampleRate, true, fixedPowerlineFrequencies());
+    if (!notchDesign.hasSections()) {
+        return preNotchData;
+    }
+
+    if (filterState != nullptr && hasNotchFilterState) {
+        return applyIirPreFilter(preNotchData, filterState->notchState);
+    }
+
+    kfr::iir_state<double, 5> temporaryState{ notchDesign.params() };
+    return applyIirPreFilter(preNotchData, temporaryState);
+}
+
+QVector<float> applyStreamingPreFilter(
+    const QVector<float>& rawData,
+    int sampleRate,
+    const SignalPreprocessOptions& options,
+    SignalPreFilterState* filterState,
+    bool hasBandpassFilterState,
+    bool hasNotchFilterState)
 {
     if (rawData.isEmpty()) {
         return {};
     }
 
-    const PreFilterDesign preFilterDesign = makePreFilterDesign(sampleRate, options);
-    if (!preFilterDesign.hasSections()) {
-        return rawData;
-    }
-
-    if (filterState != nullptr && hasFilterState) {
-        return applyIirPreFilter(rawData, *filterState);
-    }
-
-    kfr::iir_state<double, 5> temporaryState{ preFilterDesign.params() };
-    return applyIirPreFilter(rawData, temporaryState);
+    const QVector<float> bandpassData = applyBandpassFilterFrame(
+        rawData,
+        sampleRate,
+        options,
+        filterState,
+        hasBandpassFilterState);
+    return applyNotchFilterFrame(
+        bandpassData,
+        sampleRate,
+        options,
+        filterState,
+        hasNotchFilterState);
 }
 
 double elapsedMilliseconds(const QElapsedTimer& timer)
 {
     return static_cast<double>(timer.nsecsElapsed()) / 1000000.0;
+}
+
+void appendFrame(QVector<float>& destination, const QVector<float>& frame)
+{
+    for (float sample : frame) {
+        destination.append(sample);
+    }
+}
+
+QVector<float> applyImportPreFilterPipeline(
+    const QVector<float>& rawData,
+    int sampleRate,
+    const SignalPreprocessOptions& options,
+    QVariantMap& timingSummary)
+{
+    if (rawData.isEmpty()) {
+        return {};
+    }
+
+    SignalPreFilterState importFilterState;
+    bool hasBandpassFilterState = false;
+    bool hasNotchFilterState = false;
+    initializePreFilterState(
+        importFilterState,
+        sampleRate,
+        options,
+        &hasBandpassFilterState,
+        &hasNotchFilterState);
+    if (options.bandpassEnabled && options.firFilterEnabled && hasBandpassFilterState) {
+        timingSummary.insert(
+            QStringLiteral("bandpassFirOrder"),
+            importFilterState.bandpassFirOrder);
+    }
+
+    QVector<float> preprocessedData;
+    preprocessedData.reserve(rawData.size());
+    const qsizetype frameSampleCount = std::max<qsizetype>(
+        1,
+        static_cast<qsizetype>(
+            std::round(static_cast<double>(sampleRate) * kAdaptiveNotchFrameSeconds)));
+
+    double bandpassMs = 0.0;
+    double notchMs = 0.0;
+    for (qsizetype startIndex = 0; startIndex < rawData.size(); startIndex += frameSampleCount) {
+        const qsizetype currentFrameSampleCount =
+            std::min(frameSampleCount, rawData.size() - startIndex);
+        QVector<float> frameData = rawData.mid(startIndex, currentFrameSampleCount);
+
+        if (options.bandpassEnabled) {
+            QElapsedTimer bandpassTimer;
+            bandpassTimer.start();
+            frameData = applyBandpassFilterFrame(
+                frameData,
+                sampleRate,
+                options,
+                &importFilterState,
+                hasBandpassFilterState);
+            bandpassMs += elapsedMilliseconds(bandpassTimer);
+        }
+
+        if (options.notchEnabled) {
+            QElapsedTimer notchTimer;
+            notchTimer.start();
+            frameData = applyNotchFilterFrame(
+                frameData,
+                sampleRate,
+                options,
+                &importFilterState,
+                hasNotchFilterState);
+            notchMs += elapsedMilliseconds(notchTimer);
+        }
+
+        appendFrame(preprocessedData, frameData);
+    }
+
+    if (options.bandpassEnabled) {
+        timingSummary.insert(QStringLiteral("bandpassMs"), bandpassMs);
+    }
+    if (options.notchEnabled) {
+        timingSummary.insert(QStringLiteral("notchMs"), notchMs);
+    }
+
+    return preprocessedData;
 }
 
 double normalizeRealtimeGain(double gain)
@@ -295,8 +980,9 @@ QVector<float> runRealtimePreprocessPipeline(
     const SignalPreprocessOptions& options,
     const QVector<float>* referenceNoise = nullptr,
     ActiveNoiseCancellation::StreamingState* ancStreamingState = nullptr,
-    kfr::iir_state<double, 5>* filterState = nullptr,
-    bool hasFilterState = false,
+    SignalPreFilterState* preFilterState = nullptr,
+    bool hasBandpassFilterState = false,
+    bool hasNotchFilterState = false,
     AdaptiveNoiseReduction::StreamingState* adaptiveStreamingState = nullptr)
 {
     if (rawData.isEmpty()) {
@@ -304,12 +990,13 @@ QVector<float> runRealtimePreprocessPipeline(
     }
 
     const int effectiveSampleRate = resolveSampleRate(sampleRate);
-    QVector<float> processedData = applyRealtimePreFilter(
+    QVector<float> processedData = applyStreamingPreFilter(
         rawData,
         effectiveSampleRate,
         options,
-        filterState,
-        hasFilterState);
+        preFilterState,
+        hasBandpassFilterState,
+        hasNotchFilterState);
 
     if (options.activeNoiseCancellationEnabled &&
         referenceNoise != nullptr &&
@@ -434,6 +1121,12 @@ bool SignalPreprocessing::importNotchEnabled() const
     return m_importNotchEnabled;
 }
 
+int SignalPreprocessing::importNotchFrequencyMode() const
+{
+    QMutexLocker locker(&m_importSettingsMutex);
+    return m_importNotchFrequencyMode;
+}
+
 bool SignalPreprocessing::importAdaptiveNoiseReductionEnabled() const
 {
     QMutexLocker locker(&m_importSettingsMutex);
@@ -486,6 +1179,12 @@ bool SignalPreprocessing::realtimeNotchEnabled() const
 {
     QMutexLocker locker(&m_realtimeSettingsMutex);
     return m_realtimeNotchEnabled;
+}
+
+int SignalPreprocessing::realtimeNotchFrequencyMode() const
+{
+    QMutexLocker locker(&m_realtimeSettingsMutex);
+    return m_realtimeNotchFrequencyMode;
 }
 
 bool SignalPreprocessing::realtimeActiveNoiseCancellationEnabled() const
@@ -609,6 +1308,21 @@ void SignalPreprocessing::setImportNotchEnabled(bool enabled)
     }
 
     emit importNotchEnabledChanged();
+    emit importProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setImportNotchFrequencyMode(int mode)
+{
+    const int normalizedMode = normalizeNotchFrequencyMode(mode);
+    {
+        QMutexLocker locker(&m_importSettingsMutex);
+        if (m_importNotchFrequencyMode == normalizedMode) {
+            return;
+        }
+        m_importNotchFrequencyMode = normalizedMode;
+    }
+
+    emit importNotchFrequencyModeChanged();
     emit importProcessingSettingsChanged();
 }
 
@@ -768,6 +1482,21 @@ void SignalPreprocessing::setRealtimeNotchEnabled(bool enabled)
     }
 
     emit realtimeNotchEnabledChanged();
+    emit realtimeProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setRealtimeNotchFrequencyMode(int mode)
+{
+    const int normalizedMode = normalizeNotchFrequencyMode(mode);
+    {
+        QMutexLocker locker(&m_realtimeSettingsMutex);
+        if (m_realtimeNotchFrequencyMode == normalizedMode) {
+            return;
+        }
+        m_realtimeNotchFrequencyMode = normalizedMode;
+    }
+
+    emit realtimeNotchFrequencyModeChanged();
     emit realtimeProcessingSettingsChanged();
 }
 
@@ -957,28 +1686,12 @@ QVector<float> SignalPreprocessing::filterDataImport(
     timingSummary.insert(QStringLiteral("motionArtifactReductionMs"), -1.0);
     timingSummary.insert(QStringLiteral("downsamplingMs"), -1.0);
 
-    if (importOptions.bandpassEnabled) {
-        SignalPreprocessOptions bandpassOnlyOptions;
-        bandpassOnlyOptions.notchEnabled = false;
-
-        const PreFilterDesign bandpassDesign =
-            makePreFilterDesign(effectiveSampleRate, bandpassOnlyOptions);
-        QElapsedTimer bandpassTimer;
-        bandpassTimer.start();
-        preprocessedData = applyPreFilterDesign(preprocessedData, bandpassDesign);
-        timingSummary.insert(QStringLiteral("bandpassMs"), elapsedMilliseconds(bandpassTimer));
-    }
-
-    if (importOptions.notchEnabled) {
-        SignalPreprocessOptions notchOnlyOptions;
-        notchOnlyOptions.bandpassEnabled = false;
-
-        const PreFilterDesign notchDesign =
-            makePreFilterDesign(effectiveSampleRate, notchOnlyOptions);
-        QElapsedTimer notchTimer;
-        notchTimer.start();
-        preprocessedData = applyPreFilterDesign(preprocessedData, notchDesign);
-        timingSummary.insert(QStringLiteral("notchMs"), elapsedMilliseconds(notchTimer));
+    if (importOptions.bandpassEnabled || importOptions.notchEnabled) {
+        preprocessedData = applyImportPreFilterPipeline(
+            preprocessedData,
+            effectiveSampleRate,
+            importOptions,
+            timingSummary);
     }
 
     if (importOptions.adaptiveNoiseReductionEnabled) {
@@ -1025,6 +1738,9 @@ QVector<float> SignalPreprocessing::filterDataImport(
             elapsedMilliseconds(motionArtifactTimer));
     }
 
+    const int bandpassFirOrder =
+        timingSummary.take(QStringLiteral("bandpassFirOrder")).toInt();
+
     qDebug() << "SignalPreprocessing: imported preprocessing complete"
              << "sampleRate:" << effectiveSampleRate
              << "sampleCount:" << preprocessedData.size();
@@ -1044,11 +1760,20 @@ QVector<float> SignalPreprocessing::filterDataImport(
         {QStringLiteral("processing"), QVariantMap{
              {QStringLiteral("bandpassEnabled"), importOptions.bandpassEnabled},
              {QStringLiteral("notchEnabled"), importOptions.notchEnabled},
+             {QStringLiteral("notchFrequencyMode"),
+              normalizeNotchFrequencyMode(importOptions.notchFrequencyMode) == NotchFrequencyAdaptive
+                  ? QStringLiteral("adaptive")
+                  : QStringLiteral("fixed")},
              {QStringLiteral("firFilterEnabled"), importOptions.firFilterEnabled},
              {QStringLiteral("filterType"),
               importOptions.firFilterEnabled
                   ? QStringLiteral("FIR")
                   : QStringLiteral("IIR")},
+             {QStringLiteral("bandpassFilterType"),
+              importOptions.firFilterEnabled
+                  ? QStringLiteral("FIR")
+                  : QStringLiteral("IIR")},
+             {QStringLiteral("bandpassFirOrder"), bandpassFirOrder},
              {QStringLiteral("adaptiveNoiseReductionEnabled"),
               importOptions.adaptiveNoiseReductionEnabled},
              {QStringLiteral("waveletDenoisingEnabled"), importOptions.waveletEnabled},
@@ -1073,6 +1798,7 @@ SignalPreprocessOptions SignalPreprocessing::importPreprocessOptions() const
         QMutexLocker locker(&m_importSettingsMutex);
         options.bandpassEnabled = m_importBandpassEnabled;
         options.notchEnabled = m_importNotchEnabled;
+        options.notchFrequencyMode = m_importNotchFrequencyMode;
         options.firFilterEnabled = m_importFirFilterEnabled;
         options.adaptiveNoiseReductionEnabled = m_importAdaptiveNoiseReductionEnabled;
         options.waveletEnabled = m_importWaveletDenoisingEnabled;
@@ -1090,6 +1816,7 @@ SignalPreprocessOptions SignalPreprocessing::realtimePreprocessOptions() const
         QMutexLocker locker(&m_realtimeSettingsMutex);
         options.bandpassEnabled = m_realtimeBandpassEnabled;
         options.notchEnabled = m_realtimeNotchEnabled;
+        options.notchFrequencyMode = m_realtimeNotchFrequencyMode;
         options.firFilterEnabled = m_realtimeFirFilterEnabled;
         options.activeNoiseCancellationEnabled = m_realtimeActiveNoiseCancellationEnabled;
         options.adaptiveNoiseReductionEnabled = m_realtimeAdaptiveNoiseReductionEnabled;
@@ -1118,19 +1845,37 @@ void PreprocessingWorker::initPreFilter(
 {
     m_preFilterSampleRate = resolveSampleRate(sampleRate);
     m_preFilterBandpassEnabled = options.bandpassEnabled;
+    m_preFilterBandpassFirFilterEnabled = options.firFilterEnabled;
     m_preFilterNotchEnabled = options.notchEnabled;
-    const PreFilterDesign design = makePreFilterDesign(
-        m_preFilterSampleRate,
-        options);
-    m_hasPreFilterState = design.hasSections();
-    for (RealtimePreFilterState& channelState : m_preFilterStates) {
-        if (m_hasPreFilterState) {
-            channelState.state = kfr::iir_state<double, 5>{ design.params() };
-        } else {
-            channelState.state =
-                kfr::iir_state<double, 5>{ kfr::iir_params<double, 5>() };
-        }
+    m_preFilterNotchFrequencyMode =
+        normalizeNotchFrequencyMode(options.notchFrequencyMode);
+
+    const PreFilterDesign bandpassDesign =
+        makeBandpassFilterDesign(m_preFilterSampleRate, options.bandpassEnabled);
+    const FirBandpassDesign firBandpassDesign =
+        makeFirBandpassFilterDesign(
+            m_preFilterSampleRate,
+            options.bandpassEnabled && options.firFilterEnabled);
+    const PreFilterDesign notchDesign =
+        makeNotchFilterDesign(
+            m_preFilterSampleRate,
+            options.notchEnabled,
+            fixedPowerlineFrequencies());
+
+    const bool hasBandpassFilterState = options.firFilterEnabled
+        ? firBandpassDesign.hasTaps()
+        : bandpassDesign.hasSections();
+    const bool hasNotchFilterState = notchDesign.hasSections();
+    for (SignalPreFilterState& channelState : m_preFilterStates) {
+        initializePreFilterState(
+            channelState,
+            bandpassDesign,
+            firBandpassDesign,
+            options.firFilterEnabled,
+            notchDesign);
     }
+    m_hasBandpassFilterState = hasBandpassFilterState;
+    m_hasNotchFilterState = hasNotchFilterState;
 }
 
 void PreprocessingWorker::updateChannel(int channel)
@@ -1177,7 +1922,10 @@ void PreprocessingWorker::processing()
     const bool preFilterConfigChanged =
         m_preFilterSampleRate != configuredSampleRate ||
         m_preFilterBandpassEnabled != realtimeOptions.bandpassEnabled ||
-        m_preFilterNotchEnabled != realtimeOptions.notchEnabled;
+        m_preFilterBandpassFirFilterEnabled != realtimeOptions.firFilterEnabled ||
+        m_preFilterNotchEnabled != realtimeOptions.notchEnabled ||
+        m_preFilterNotchFrequencyMode !=
+            normalizeNotchFrequencyMode(realtimeOptions.notchFrequencyMode);
 
     if (preFilterConfigChanged) {
         initPreFilter(configuredSampleRate, realtimeOptions);
@@ -1194,12 +1942,13 @@ void PreprocessingWorker::processing()
     bool selectedChannelReady = false;
     const QVector<float> referenceNoiseData =
         DaqDeviceManager::instance()->getDataCache(kRealtimeReferenceNoiseChannel);
-    const QVector<float> filteredReferenceNoiseData = applyRealtimePreFilter(
+    const QVector<float> filteredReferenceNoiseData = applyStreamingPreFilter(
         referenceNoiseData,
         configuredSampleRate,
         realtimeOptions,
-        &m_preFilterStates[static_cast<size_t>(kRealtimeReferenceNoiseChannel)].state,
-        m_hasPreFilterState);
+        &m_preFilterStates[static_cast<size_t>(kRealtimeReferenceNoiseChannel)],
+        m_hasBandpassFilterState,
+        m_hasNotchFilterState);
     DataManager::instance()->splicRealtimeChannelTimeDomainData(
         kRealtimeReferenceNoiseChannel,
         filteredReferenceNoiseData,
@@ -1224,8 +1973,9 @@ void PreprocessingWorker::processing()
                 realtimeOptions,
                 &filteredReferenceNoiseData,
                 &m_realtimeAncStates[static_cast<size_t>(channel)],
-                &m_preFilterStates[static_cast<size_t>(channel)].state,
-                m_hasPreFilterState,
+                &m_preFilterStates[static_cast<size_t>(channel)],
+                m_hasBandpassFilterState,
+                m_hasNotchFilterState,
                 &m_realtimeAdaptiveStates[static_cast<size_t>(channel)]);
             selectedPreprocessedData = preprocessedData;
             selectedChannelReady = true;
@@ -1237,8 +1987,9 @@ void PreprocessingWorker::processing()
                 realtimeOptions,
                 &filteredReferenceNoiseData,
                 &m_realtimeAncStates[static_cast<size_t>(channel)],
-                &m_preFilterStates[static_cast<size_t>(channel)].state,
-                m_hasPreFilterState,
+                &m_preFilterStates[static_cast<size_t>(channel)],
+                m_hasBandpassFilterState,
+                m_hasNotchFilterState,
                 &m_realtimeAdaptiveStates[static_cast<size_t>(channel)]);
         }
 

@@ -37,6 +37,7 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     app.setWindowIcon(QIcon(":/AppIcon.ico"));
 
+    DaqDeviceManager* daqManager = DaqDeviceManager::instance();
     DatabaseManager* databaseManager = DatabaseManager::instance();
     databaseManager->initializeSearchDatabase();
 
@@ -46,11 +47,11 @@ int main(int argc, char *argv[])
     RecognitionServiceManager recognitionServiceManager(&app);
     UpdateManager updateManager(&app);
     DebugTerminalManager debugTerminalManager(&app);
-    SystemStatusMonitor systemStatusMonitor(&app);
+    SystemStatusMonitor systemStatusMonitor(daqManager, &app);
 
     QQmlApplicationEngine engine;
 
-    engine.rootContext()->setContextProperty("daqManager", DaqDeviceManager::instance());
+    engine.rootContext()->setContextProperty("daqManager", daqManager);
     engine.rootContext()->setContextProperty("wavHandle", WAVHandle::instance());
     engine.rootContext()->setContextProperty(
         "signalPreprocessing",

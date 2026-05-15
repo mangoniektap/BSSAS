@@ -25,7 +25,14 @@
 namespace {
 constexpr double kMaxDisplayFrequency = 3000.0;
 constexpr double kNormalizedDisplayMax = 4.0;
-constexpr double kImportedStftWindowSeconds = 0.2;
+constexpr double kDefaultAnalysisWindowSeconds = 0.2;
+
+double sanitizeAnalysisWindowSeconds(double windowSeconds)
+{
+    return std::isfinite(windowSeconds) && windowSeconds > 0.0
+        ? windowSeconds
+        : kDefaultAnalysisWindowSeconds;
+}
 
 void normalizeSpectrumMagnitudes(QVector<float>& magnitudes, int fftSize)
 {
@@ -176,26 +183,40 @@ double elapsedMilliseconds(const QElapsedTimer& timer)
 
 QVariantList computeImportedDftDataAndCache(
     const QVector<float>& timeDomainDataImport,
-    int sampleRate)
+    int sampleRate,
+    double windowSeconds)
 {
+    const double analysisWindowSeconds = sanitizeAnalysisWindowSeconds(windowSeconds);
     if (timeDomainDataImport.isEmpty() || sampleRate <= 0) {
-        DataManager::instance()->storeImportedStftSpectrumData(sampleRate, {}, {});
+        DataManager::instance()->storeImportedStftSpectrumData(
+            sampleRate,
+            {},
+            {},
+            analysisWindowSeconds);
         return {};
     }
 
     const int windowSampleCount = qMax(
         1,
-        static_cast<int>(qRound(static_cast<double>(sampleRate) * kImportedStftWindowSeconds)));
+        static_cast<int>(qRound(static_cast<double>(sampleRate) * analysisWindowSeconds)));
     const int hopSampleCount = windowSampleCount;
 
     if (timeDomainDataImport.size() < windowSampleCount) {
-        DataManager::instance()->storeImportedStftSpectrumData(sampleRate, {}, {});
+        DataManager::instance()->storeImportedStftSpectrumData(
+            sampleRate,
+            {},
+            {},
+            analysisWindowSeconds);
         return {};
     }
 
     const int frameCount = timeDomainDataImport.size() / hopSampleCount;
     if (frameCount <= 0) {
-        DataManager::instance()->storeImportedStftSpectrumData(sampleRate, {}, {});
+        DataManager::instance()->storeImportedStftSpectrumData(
+            sampleRate,
+            {},
+            {},
+            analysisWindowSeconds);
         return {};
     }
 
@@ -230,7 +251,8 @@ QVariantList computeImportedDftDataAndCache(
     DataManager::instance()->storeImportedStftSpectrumData(
         sampleRate,
         frameCenterTimes,
-        frameMagnitudes);
+        frameMagnitudes,
+        analysisWindowSeconds);
     return DataManager::instance()->importedSpectrumPointsAtTime(
         0.0,
         DataManager::instance()->importedSpectrumBoundary(),
@@ -247,6 +269,11 @@ SignalDFTCalculation::SignalDFTCalculation(QObject* parent)
 
     connect(this, &SignalDFTCalculation::processingStart, m_worker, &DFTWorker::startWork);
     connect(this, &SignalDFTCalculation::processingStop, m_worker, &DFTWorker::stopWork);
+    connect(
+        this,
+        &SignalDFTCalculation::realtimeAnalysisWindowSecondsChanged,
+        m_worker,
+        &DFTWorker::setAnalysisWindowSeconds);
     connect(m_worker, &DFTWorker::resultReady, this, &SignalDFTCalculation::updateDFTData);
     connect(m_thread, &QThread::finished, m_worker, &QObject::deleteLater);
 
@@ -263,6 +290,29 @@ SignalDFTCalculation::~SignalDFTCalculation()
         m_thread->quit();
         m_thread->wait();
     }
+}
+
+void SignalDFTCalculation::setRealtimeAnalysisWindowSeconds(double windowSeconds)
+{
+    const double sanitizedWindowSeconds = sanitizeAnalysisWindowSeconds(windowSeconds);
+    if (qFuzzyCompare(m_realtimeAnalysisWindowSeconds, sanitizedWindowSeconds)) {
+        return;
+    }
+
+    m_realtimeAnalysisWindowSeconds = sanitizedWindowSeconds;
+    clearRealtimeStftCache();
+    emit realtimeAnalysisWindowSecondsChanged(m_realtimeAnalysisWindowSeconds);
+}
+
+void SignalDFTCalculation::setImportAnalysisWindowSeconds(double windowSeconds)
+{
+    const double sanitizedWindowSeconds = sanitizeAnalysisWindowSeconds(windowSeconds);
+    if (qFuzzyCompare(m_importAnalysisWindowSeconds, sanitizedWindowSeconds)) {
+        return;
+    }
+
+    m_importAnalysisWindowSeconds = sanitizedWindowSeconds;
+    emit importAnalysisWindowSecondsChanged(m_importAnalysisWindowSeconds);
 }
 
 /** @brief 启动实时STFT处理，清空缓存并从预处理管道拉取数据。 */
@@ -282,17 +332,23 @@ void SignalDFTCalculation::stopDFTProcessing()
  * @brief 接收新生成的STFT帧数据并存入滑动窗口缓存。
  * @param dftData QVariantList格式的频谱点。
  * @param centerTimeSeconds 该帧的中心时间（秒）。
+ * @param windowSeconds 该帧的窗长（秒）。
  */
-void SignalDFTCalculation::updateDFTData(QVariantList dftData, double centerTimeSeconds)
+void SignalDFTCalculation::updateDFTData(
+    QVariantList dftData,
+    double centerTimeSeconds,
+    double windowSeconds)
 {
     m_dftData = dftData;
 
     if (!dftData.isEmpty()) {
         m_realtimeStftCenterTimes.append(centerTimeSeconds);
+        m_realtimeStftWindowSeconds.append(sanitizeAnalysisWindowSeconds(windowSeconds));
         m_realtimeStftFrames.append(dftData);
 
         while (m_realtimeStftCenterTimes.size() > MAX_REALTIME_STFT_FRAMES) {
             m_realtimeStftCenterTimes.removeFirst();
+            m_realtimeStftWindowSeconds.removeFirst();
             m_realtimeStftFrames.removeFirst();
         }
     }
@@ -345,14 +401,18 @@ QVariantMap SignalDFTCalculation::realtimeStftTimeRangeAtTime(double centerSecon
         }
     }
 
+    const double windowSeconds = nearestIndex < m_realtimeStftWindowSeconds.size()
+        ? m_realtimeStftWindowSeconds[nearestIndex]
+        : m_realtimeAnalysisWindowSeconds;
     return buildSpectrumTimeRange(
         m_realtimeStftCenterTimes[nearestIndex],
-        kImportedStftWindowSeconds);
+        windowSeconds);
 }
 
 void SignalDFTCalculation::clearRealtimeStftCache()
 {
     m_realtimeStftCenterTimes.clear();
+    m_realtimeStftWindowSeconds.clear();
     m_realtimeStftFrames.clear();
     m_dftData.clear();
     emit dftResultReady();
@@ -369,29 +429,33 @@ void SignalDFTCalculation::startImportedDftProcessing()
 
     const QVector<float> timeDomainDataImport = WAVHandle::instance()->timeDomainDataImport();
     const int sampleRate = WAVHandle::instance()->importSampleRate();
+    const double importAnalysisWindowSeconds = m_importAnalysisWindowSeconds;
 
     setImportBusy(true);
-    m_importThread = QThread::create([this, timeDomainDataImport, sampleRate]() {
-        QElapsedTimer dftTimer;
-        dftTimer.start();
-        QVariantList importedDftData =
-            computeImportedDftDataAndCache(timeDomainDataImport, sampleRate);
-        const double dftMs = elapsedMilliseconds(dftTimer);
-        QMetaObject::invokeMethod(
-            this,
-            [this, importedDftData = std::move(importedDftData), dftMs]() mutable {
-                DataManager::instance()->updateImportedAnalysisSummary({
-                    {QStringLiteral("timings"), QVariantMap{
-                         {QStringLiteral("dftMs"), dftMs}
-                     }}
-                });
-                m_dftData = std::move(importedDftData);
-                emit dftResultReady();
-                emit importedDftProcessingFinished();
-                setImportBusy(false);
-            },
-            Qt::QueuedConnection);
-    });
+    m_importThread = QThread::create(
+        [this, timeDomainDataImport, sampleRate, importAnalysisWindowSeconds]() {
+            QElapsedTimer dftTimer;
+            dftTimer.start();
+            QVariantList importedDftData = computeImportedDftDataAndCache(
+                timeDomainDataImport,
+                sampleRate,
+                importAnalysisWindowSeconds);
+            const double dftMs = elapsedMilliseconds(dftTimer);
+            QMetaObject::invokeMethod(
+                this,
+                [this, importedDftData = std::move(importedDftData), dftMs]() mutable {
+                    DataManager::instance()->updateImportedAnalysisSummary({
+                        {QStringLiteral("timings"), QVariantMap{
+                             {QStringLiteral("dftMs"), dftMs}
+                         }}
+                    });
+                    m_dftData = std::move(importedDftData);
+                    emit dftResultReady();
+                    emit importedDftProcessingFinished();
+                    setImportBusy(false);
+                },
+                Qt::QueuedConnection);
+        });
 
     connect(
         m_importThread,
@@ -460,6 +524,20 @@ void DFTWorker::stopWork()
     }
 }
 
+void DFTWorker::setAnalysisWindowSeconds(double windowSeconds)
+{
+    const double sanitizedWindowSeconds = sanitizeAnalysisWindowSeconds(windowSeconds);
+    QMutexLocker locker(&m_dataMutex);
+    if (qFuzzyCompare(m_analysisWindowSeconds, sanitizedWindowSeconds)) {
+        return;
+    }
+
+    m_analysisWindowSeconds = sanitizedWindowSeconds;
+    m_pendingSamples.clear();
+    m_processedSeconds = 0.0;
+    m_stftWindowSampleCount = 0;
+}
+
 /**
  * @brief 定时从预处理缓冲区拉取数据，构建STFT帧并同步输出频谱图数据。
  */
@@ -477,10 +555,11 @@ void DFTWorker::processing()
 
     {
         QMutexLocker locker(&m_dataMutex);
+        const double analysisWindowSeconds = m_analysisWindowSeconds;
         const int nextWindowSampleCount = qMax(
             1,
             static_cast<int>(qRound(
-                static_cast<double>(sampleRate) * kImportedStftWindowSeconds)));
+                static_cast<double>(sampleRate) * analysisWindowSeconds)));
         if (m_stftWindowSampleCount != nextWindowSampleCount) {
             m_pendingSamples.clear();
             m_processedSeconds = 0.0;
@@ -499,6 +578,7 @@ void DFTWorker::produceStftFrames()
         QVector<float> frameSignal;
         int sampleRate = DataManager::instance()->configuredSampleRate();
         double centerTimeSeconds = 0.0;
+        double windowSeconds = kDefaultAnalysisWindowSeconds;
 
         {
             QMutexLocker locker(&m_dataMutex);
@@ -510,12 +590,13 @@ void DFTWorker::produceStftFrames()
             m_pendingSamples.remove(0, m_stftWindowSampleCount);
 
             const double frameStartSeconds = m_processedSeconds;
-            m_processedSeconds +=
+            windowSeconds =
                 static_cast<double>(m_stftWindowSampleCount) / static_cast<double>(sampleRate);
+            m_processedSeconds +=
+                windowSeconds;
             centerTimeSeconds =
                 frameStartSeconds +
-                static_cast<double>(m_stftWindowSampleCount) /
-                    (2.0 * static_cast<double>(sampleRate));
+                windowSeconds / 2.0;
         }
 
         if (frameSignal.isEmpty()) {
@@ -542,6 +623,7 @@ void DFTWorker::produceStftFrames()
                 spectrum.fftSize,
                 0.0,
                 kMaxDisplayFrequency),
-            centerTimeSeconds);
+            centerTimeSeconds,
+            windowSeconds);
     }
 }
