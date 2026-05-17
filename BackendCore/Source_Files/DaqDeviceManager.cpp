@@ -95,8 +95,11 @@ DaqDeviceManager::~DaqDeviceManager()
 }
 void DaqDeviceManager::updateDataCache(const QVector<QVector<float>>& data)
 {
-    QMutexLocker locker(&m_dataCacheMutex);
-    m_channelsDataCache = data;
+    {
+        QMutexLocker locker(&m_dataCacheMutex);
+        m_channelsDataCache = data;
+    }
+    emit realtimeDataUpdated(data);
 }
 
 void DaqDeviceManager::clearDataCache()

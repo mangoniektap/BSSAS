@@ -28,8 +28,12 @@ public:
 
         double minimumReferenceRms = 1e-7;          /**< 参考信号最小 RMS 阈值，低于此认为无信号 */
         double minimumReferenceValidRatio = 0.96;   /**< 参考信号有效帧比例下限 */
-        double minimumCorrelation = 0.10;           /**< 目标和参考之间的最小相关系数 */
-        double stepSize = 0.45;                     /**< LMS 步长 */
+        double minimumCorrelation = 0.20;           /**< 目标和参考之间的最小相关系数 */
+        double minimumCancellationCorrelation = 0.08;   /**< 对消硬旁路相关性下限，低于此立即关闭对消 */
+        int cancellationRampUpFrames = 1;               /**< 连续高相关帧数达到后才增强对消 */
+        double cancellationAttackStep = 1.0;           /**< 对消门控每帧增强步进 */
+        double cancellationReleaseStep = 0.5;          /**< 对消门控每帧衰减步进 */
+        double stepSize = 0.30;                     /**< LMS 步长 */
         double normalizationEpsilon = 1e-6;         /**< 归一化因子防止除零 */
         double dcBlockerCutoffHz = 1.0;             /**< 直流阻断滤波器截止频率 (Hz) */
     };
@@ -40,12 +44,15 @@ public:
         bool referenceValid = false;        /**< 参考信号是否有效 */
         bool bypassed = false;              /**< 是否因信号质量不足而旁路 */
         bool adaptationFrozen = false;      /**< 自适应是否被冻结 */
+        bool cancellationActive = false;    /**< 对消门控是否处于开启状态 */
         double referenceRms = 0.0;          /**< 参考信号 RMS 值 */
         double targetRms = 0.0;             /**< 目标信号 RMS 值 */
         double outputRms = 0.0;             /**< 输出信号 RMS 值 */
         double correlation = 0.0;           /**< 目标与参考的相关系数 */
+        double cancellationGain = 0.0;      /**< 当前对消门控增益 */
         double stepSize = 0.0;              /**< 实际使用的步长 */
         int selectedDelaySamples = 0;       /**< 选定的最优时延（样本数） */
+        int highCorrelationFrameCount = 0;  /**< 连续高相关帧计数 */
     };
 
     /** @brief ANC 流式处理的内部状态 */
@@ -66,7 +73,9 @@ public:
         double targetDcEstimate = 0.0;          /**< 目标信号直流分量估计 */
         double referenceDcEstimate = 0.0;       /**< 参考信号直流分量估计 */
         double lastCorrelation = 0.0;           /**< 上一帧相关系数 */
+        double cancellationGain = 0.0;          /**< 对消门控平滑增益 */
         int selectedDelaySamples = 0;           /**< 选定的时延（样本数） */
+        int highCorrelationFrameCount = 0;      /**< 连续高相关帧计数 */
         bool hasUsableWeights = false;          /**< 滤波器权重是否已收敛可用 */
     };
 

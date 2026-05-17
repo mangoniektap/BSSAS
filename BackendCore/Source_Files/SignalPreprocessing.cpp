@@ -964,6 +964,9 @@ void logAncDebugMetrics(
              << "valid" << metrics.referenceValid // 参考通道是否满足ANC使用条件。
              << "bypassed" << metrics.bypassed // ANC是否旁路，即直接返回原目标信号。
              << "frozen" << metrics.adaptationFrozen // 自适应滤波器权重是否暂停更新。
+             << "cancelActive" << metrics.cancellationActive
+             << "cancelGain" << metrics.cancellationGain
+             << "highCorrFrames" << metrics.highCorrelationFrameCount
              << "corr" << metrics.correlation // 目标信号与参考噪声的最佳归一化相关系数。
              << "delaySamples" << metrics.selectedDelaySamples // 估计出的参考噪声延迟，单位为采样点。
              << "step" << metrics.stepSize // 当前NLMS自适应更新步长。

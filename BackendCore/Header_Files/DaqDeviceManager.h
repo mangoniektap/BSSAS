@@ -181,6 +181,8 @@ signals:
     void deviceErrorChanged();
     /** @brief 通道激活状态变更 */
     void activeChannelsChanged();
+    /** @brief 实时原始数据更新，供监听等实时消费者订阅 */
+    void realtimeDataUpdated(const QVector<QVector<float>>& data);
 
     // 通知 Worker 的内部信号
     /** @brief 通知 Worker 执行初始化 */

@@ -13,10 +13,12 @@
 #include <limits>
 
 namespace {
+constexpr double kFilterLengthSeconds = 0.020;
 constexpr int kMinimumFilterLength = 16;
-constexpr int kNormalMaximumFilterLength = 256;
-constexpr int kHighSpeedMaximumFilterLength = 512;
-constexpr int kMinimumCorrelationSamples = 16;
+constexpr int kNormalMaximumFilterLength = 512;
+constexpr int kHighSpeedMaximumFilterLength = 1024;
+constexpr int kMinimumCorrelationReferenceSampleRate = 12000;
+constexpr int kMinimumCorrelationReferenceSamples = 96;
 constexpr double kTwoPi = 6.28318530717958647692;
 
 std::atomic_bool g_debugLoggingEnabled = true;
@@ -24,6 +26,17 @@ std::atomic_bool g_debugLoggingEnabled = true;
 int normalizeSampleRate(int sampleRate)
 {
     return sampleRate > 0 ? sampleRate : DataManager::DEFAULT_SAMPLE_RATE;
+}
+
+int minimumCorrelationSamples(int sampleRate)
+{
+    const int effectiveSampleRate = normalizeSampleRate(sampleRate);
+    return std::max(
+        1,
+        static_cast<int>(std::lround(
+            static_cast<double>(effectiveSampleRate) *
+            static_cast<double>(kMinimumCorrelationReferenceSamples) /
+            static_cast<double>(kMinimumCorrelationReferenceSampleRate))));
 }
 
 bool sameParameters(
@@ -35,6 +48,10 @@ bool sameParameters(
         left.minimumReferenceRms == right.minimumReferenceRms &&
         left.minimumReferenceValidRatio == right.minimumReferenceValidRatio &&
         left.minimumCorrelation == right.minimumCorrelation &&
+        left.minimumCancellationCorrelation == right.minimumCancellationCorrelation &&
+        left.cancellationRampUpFrames == right.cancellationRampUpFrames &&
+        left.cancellationAttackStep == right.cancellationAttackStep &&
+        left.cancellationReleaseStep == right.cancellationReleaseStep &&
         left.stepSize == right.stepSize &&
         left.normalizationEpsilon == right.normalizationEpsilon &&
         left.dcBlockerCutoffHz == right.dcBlockerCutoffHz;
@@ -120,6 +137,43 @@ double computeValidRatioAtLag(
     return validCount / static_cast<double>(usedCount);
 }
 
+double finiteOr(double value, double fallback)
+{
+    return std::isfinite(value) ? value : fallback;
+}
+
+double clamp01(double value)
+{
+    return std::clamp(finiteOr(value, 0.0), 0.0, 1.0);
+}
+
+double rampToward(double current, double target, double maximumStep)
+{
+    const double clampedCurrent = clamp01(current);
+    const double clampedTarget = clamp01(target);
+    const double step = clamp01(maximumStep);
+    if (clampedTarget > clampedCurrent) {
+        return std::min(clampedTarget, clampedCurrent + step);
+    }
+
+    return std::max(clampedTarget, clampedCurrent - step);
+}
+
+double interpolateGain(
+    double startGain,
+    double endGain,
+    int sampleIndex,
+    int sampleCount)
+{
+    if (sampleCount <= 1) {
+        return clamp01(endGain);
+    }
+
+    const double ratio =
+        static_cast<double>(sampleIndex) / static_cast<double>(sampleCount - 1);
+    return clamp01(startGain + (endGain - startGain) * ratio);
+}
+
 double dcBlockerAlpha(double cutoffHz, int sampleRate)
 {
     const int effectiveSampleRate = normalizeSampleRate(sampleRate);
@@ -187,7 +241,8 @@ double normalizedCorrelationAtLag(
     const QVector<float>& reference,
     const QVector<float>& tail,
     int targetCount,
-    int lag)
+    int lag,
+    int minimumCorrelationSampleCount)
 {
     double targetSum = 0.0;
     double referenceSum = 0.0;
@@ -205,7 +260,7 @@ double normalizedCorrelationAtLag(
         ++usedCount;
     }
 
-    if (usedCount < kMinimumCorrelationSamples) {
+    if (usedCount < minimumCorrelationSampleCount) {
         return 0.0;
     }
 
@@ -253,18 +308,26 @@ int chooseReferenceLag(
     const QVector<float>& reference,
     const QVector<float>& tail,
     const ActiveNoiseCancellation::Parameters& parameters,
+    int sampleRate,
     int targetCount,
     double& bestCorrelation)
 {
+    const int minimumCorrelationSampleCount = minimumCorrelationSamples(sampleRate);
     const int maxLag = std::min(
         parameters.maxDelaySamples,
-        std::max(0, targetCount - kMinimumCorrelationSamples));
+        std::max(0, targetCount - minimumCorrelationSampleCount));
     int bestLag = 0;
     bestCorrelation = 0.0;
 
     for (int lag = -maxLag; lag <= maxLag; ++lag) {
         const double correlation =
-            normalizedCorrelationAtLag(target, reference, tail, targetCount, lag);
+            normalizedCorrelationAtLag(
+                target,
+                reference,
+                tail,
+                targetCount,
+                lag,
+                minimumCorrelationSampleCount);
         if (std::abs(correlation) > std::abs(bestCorrelation)) {
             bestCorrelation = correlation;
             bestLag = lag;
@@ -318,6 +381,8 @@ void clearAdaptiveWeights(ActiveNoiseCancellation::StreamingState& state)
     state.weights.fill(0.0f, state.parameters.filterLength);
     state.referenceHistory.fill(0.0f, state.parameters.filterLength);
     state.referenceHistoryWriteIndex = 0;
+    state.cancellationGain = 0.0;
+    state.highCorrelationFrameCount = 0;
     state.hasUsableWeights = false;
 }
 
@@ -359,6 +424,7 @@ QVector<float> processPending(
         state.pendingReference,
         state.referenceAlignmentTail,
         parameters,
+        state.sampleRate,
         processableCount,
         bestCorrelation);
     state.selectedDelaySamples = selectedLag;
@@ -370,11 +436,59 @@ QVector<float> processPending(
         state.pendingReferenceValidFlags,
         processableCount,
         selectedLag);
-    const bool referenceValid =
+    const bool referenceQualityValid =
         referenceRms >= parameters.minimumReferenceRms &&
-        referenceValidRatio >= parameters.minimumReferenceValidRatio &&
-        std::abs(bestCorrelation) >= parameters.minimumCorrelation;
-    const bool adaptationFrozen = !referenceValid;
+        referenceValidRatio >= parameters.minimumReferenceValidRatio;
+    const double absoluteCorrelation = std::abs(bestCorrelation);
+    const double highCorrelationThreshold =
+        std::max(0.0, finiteOr(parameters.minimumCorrelation, 0.0));
+    const double cancellationFloor =
+        std::clamp(
+            finiteOr(parameters.minimumCancellationCorrelation, 0.0),
+            0.0,
+            highCorrelationThreshold);
+    const bool highCorrelation =
+        referenceQualityValid &&
+        absoluteCorrelation >= highCorrelationThreshold;
+    const bool hardBypassCancellation =
+        !referenceQualityValid ||
+        absoluteCorrelation < cancellationFloor;
+
+    if (highCorrelation) {
+        ++state.highCorrelationFrameCount;
+    } else {
+        state.highCorrelationFrameCount = 0;
+    }
+
+    const bool adaptationFrozen = !highCorrelation;
+    const double previousCancellationGain = clamp01(state.cancellationGain);
+    double cancellationStartGain = previousCancellationGain;
+    double cancellationEndGain = previousCancellationGain;
+
+    if (hardBypassCancellation || !state.hasUsableWeights) {
+        cancellationStartGain = 0.0;
+        cancellationEndGain = 0.0;
+        state.cancellationGain = 0.0;
+    } else if (highCorrelation) {
+        const int requiredHighCorrelationFrames =
+            std::max(1, parameters.cancellationRampUpFrames);
+        if (state.highCorrelationFrameCount >= requiredHighCorrelationFrames) {
+            cancellationEndGain = rampToward(
+                previousCancellationGain,
+                1.0,
+                parameters.cancellationAttackStep);
+        }
+        state.cancellationGain = cancellationEndGain;
+    } else {
+        cancellationEndGain = rampToward(
+            previousCancellationGain,
+            0.0,
+            parameters.cancellationReleaseStep);
+        state.cancellationGain = cancellationEndGain;
+    }
+    const bool cancellationActive =
+        cancellationStartGain > 0.0 ||
+        cancellationEndGain > 0.0;
 
     QVector<float> output(processableCount, 0.0f);
     double outputEnergy = 0.0;
@@ -405,19 +519,25 @@ QVector<float> processPending(
 
         const double targetSample =
             static_cast<double>(sanitizeSample(state.pendingTarget[sampleIndex]));
-        double errorSignal = targetSample - estimatedNoise;
+        double adaptationError = targetSample - estimatedNoise;
         bool finiteSample =
             std::isfinite(estimatedNoise) &&
-            std::isfinite(errorSignal) &&
+            std::isfinite(adaptationError) &&
             std::isfinite(referenceEnergy);
         if (!finiteSample) {
             clearAdaptiveWeights(state);
             estimatedNoise = 0.0;
-            errorSignal = targetSample;
+            adaptationError = targetSample;
         }
 
+        const double cancellationGain = interpolateGain(
+            cancellationStartGain,
+            cancellationEndGain,
+            sampleIndex,
+            processableCount);
+        const double gatedOutput = targetSample - cancellationGain * estimatedNoise;
         output[sampleIndex] = static_cast<float>(
-            std::isfinite(errorSignal) ? errorSignal : targetSample);
+            std::isfinite(gatedOutput) ? gatedOutput : targetSample);
         outputEnergy += static_cast<double>(output[sampleIndex]) *
             static_cast<double>(output[sampleIndex]);
 
@@ -434,7 +554,7 @@ QVector<float> processPending(
                     static_cast<double>(state.referenceHistory[tapHistoryIndex]);
                 const double nextWeight =
                     static_cast<double>(state.weights[tapIndex]) +
-                    stepFactor * errorSignal * historySample;
+                    stepFactor * adaptationError * historySample;
                 if (std::isfinite(nextWeight)) {
                     state.weights[tapIndex] = static_cast<float>(nextWeight);
                 } else {
@@ -464,17 +584,20 @@ QVector<float> processPending(
     discardProcessedSamples(state, processableCount);
 
     if (metrics != nullptr) {
-        metrics->referenceValid = referenceValid;
-        metrics->bypassed = !referenceValid && !state.hasUsableWeights;
+        metrics->referenceValid = referenceQualityValid;
+        metrics->bypassed = !cancellationActive;
         metrics->adaptationFrozen = adaptationFrozen;
+        metrics->cancellationActive = cancellationActive;
         metrics->referenceRms = referenceRms;
         metrics->targetRms = targetRms;
         metrics->outputRms = output.isEmpty()
             ? 0.0
             : std::sqrt(outputEnergy / static_cast<double>(output.size()));
         metrics->correlation = bestCorrelation;
+        metrics->cancellationGain = state.cancellationGain;
         metrics->stepSize = adaptationFrozen ? 0.0 : parameters.stepSize;
         metrics->selectedDelaySamples = selectedLag;
+        metrics->highCorrelationFrameCount = state.highCorrelationFrameCount;
     }
 
     return output;
@@ -493,7 +616,7 @@ ActiveNoiseCancellation::Parameters ActiveNoiseCancellation::makeParameters(int 
     const int maximumFilterLength =
         effectiveSampleRate >= 100000 ? kHighSpeedMaximumFilterLength : kNormalMaximumFilterLength;
     parameters.filterLength = std::clamp(
-        static_cast<int>(std::lround(static_cast<double>(effectiveSampleRate) * 0.010)),
+        static_cast<int>(std::lround(static_cast<double>(effectiveSampleRate) * kFilterLengthSeconds)),
         kMinimumFilterLength,
         maximumFilterLength);
     parameters.maxDelaySamples = std::clamp(

@@ -241,6 +241,7 @@ find_package(KFR CONFIG REQUIRED)
 find_package(Qt6 6.10.1 REQUIRED COMPONENTS
     Core
     Gui
+    Multimedia
     Network
     Sql
     Qml
@@ -330,6 +331,7 @@ qt_add_resources(${CMAKE_PROJECT_NAME} "generate_templates"
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
     Qt6::Core
     Qt6::Gui
+    Qt6::Multimedia
     Qt6::Sql
     Qt6::Qml
     Qt6::Quick

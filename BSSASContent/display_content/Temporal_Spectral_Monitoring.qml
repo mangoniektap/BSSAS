@@ -20,6 +20,7 @@ Page {
     readonly property bool isPlotting: daqManager.isReading
     property bool pendingRealtimeSave: false
     property int currentChannelIndex: 0
+    readonly property int monitorVolumePercent: Math.round(realtimeAudioMonitor.volume * 100)
     readonly property var channelNames: ["通道一", "通道二", "通道三", "通道四", "通道五", "通道六", "通道七"]
     readonly property var activeChannels: daqManager.activeChannels
     readonly property var inactiveChannelIndices: {
@@ -53,6 +54,14 @@ Page {
     function colorWithAlpha(sourceColor, alphaValue) {
         const color = Qt.color(sourceColor)
         return Qt.rgba(color.r, color.g, color.b, alphaValue)
+    }
+
+    /**
+     * @brief 调整实时监听音量，范围限制在 0~100%。
+     * @param delta 音量增量，正数增大、负数减小
+     */
+    function adjustMonitorVolume(delta) {
+        realtimeAudioMonitor.setVolume(Math.max(0, Math.min(1, realtimeAudioMonitor.volume + delta)))
     }
 
     /**
@@ -141,6 +150,7 @@ Page {
      * @param needToast 是否在弹出的 Toast 中提示停止信息
      */
     function stopRealtimeCollection(needToast) {
+        realtimeAudioMonitor.setEnabled(false)
         signalPreprocessing.stopPreprocessing()
         adaptiveDownsampling.stopDownsamplingProcessing()
         signalDFTCalculation.stopDFTProcessing()
@@ -292,7 +302,7 @@ Page {
                 top: left_radio_button.bottom
                 topMargin: root.leftPanelSpacing
             }
-            height: root.actionButtonHeight * 2 + 8
+            height: root.actionButtonHeight * 2 + 102
 
             ColumnLayout {
                 anchors.fill: parent
@@ -371,6 +381,134 @@ Page {
                             root.startRealtimeCollection()
                         }
                     }
+                }
+
+                Rectangle {
+                    id: realtimeMonitorCard
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 86
+                    radius: 8
+                    enabled: root.isPlotting
+                    clip: true
+                    color: realtimeAudioMonitor.enabled
+                        ? root.colorWithAlpha(Theme.primary, 0.10)
+                        : Theme.pageBg
+                    border.width: 1
+                    border.color: realtimeAudioMonitor.enabled
+                        ? root.colorWithAlpha(Theme.primary, 0.30)
+                        : Theme.border
+                    opacity: enabled ? 1.0 : 0.62
+
+                    Behavior on color {
+                        ColorAnimation {
+                            duration: 160
+                        }
+                    }
+
+                    MouseArea {
+                        id: monitorWheelArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.NoButton
+                        onWheel: function(wheel) {
+                            if (!realtimeMonitorCard.enabled) {
+                                return
+                            }
+
+                            root.adjustMonitorVolume(wheel.angleDelta.y >= 0 ? 0.05 : -0.05)
+                            wheel.accepted = true
+                        }
+                    }
+
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: 6
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
+                            Text {
+                                Layout.alignment: Qt.AlignVCenter
+                                text: "实时监听"
+                                font.pixelSize: 14
+                                font.bold: true
+                                color: Theme.textPrimary
+                            }
+
+                            Item {
+                                Layout.fillWidth: true
+                            }
+
+                            Item {
+                                Layout.alignment: Qt.AlignVCenter
+                                implicitWidth: monitorSwitch.implicitWidth
+                                implicitHeight: monitorSwitch.implicitHeight
+
+                                ToggleSwitch {
+                                    id: monitorSwitch
+                                    anchors.centerIn: parent
+                                    checked: realtimeAudioMonitor.enabled
+                                    enabled: realtimeMonitorCard.enabled
+                                    interactive: false
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    enabled: realtimeMonitorCard.enabled
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: realtimeAudioMonitor.setEnabled(!realtimeAudioMonitor.enabled)
+                                }
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+
+                            Text {
+                                text: "通道一"
+                                font.pixelSize: 12
+                                color: Theme.textMuted
+                            }
+
+                            Item {
+                                Layout.fillWidth: true
+                            }
+
+                            Text {
+                                text: root.monitorVolumePercent + "%"
+                                font.pixelSize: 12
+                                font.bold: true
+                                color: realtimeAudioMonitor.enabled ? Theme.primary : Theme.textMuted
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 6
+                            radius: 3
+                            color: root.colorWithAlpha(Theme.primary, 0.14)
+
+                            Rectangle {
+                                width: parent.width * realtimeAudioMonitor.volume
+                                height: parent.height
+                                radius: parent.radius
+                                color: realtimeAudioMonitor.enabled ? Theme.primary : Theme.textMuted
+
+                                Behavior on width {
+                                    NumberAnimation {
+                                        duration: 120
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    ToolTip.visible: monitorWheelArea.containsMouse && realtimeMonitorCard.enabled
+                    ToolTip.delay: 400
+                    ToolTip.text: "鼠标滚轮调节音量"
                 }
             }
         }

@@ -50,6 +50,7 @@ target_include_directories(BackendCore
 target_link_libraries(BackendCore PUBLIC
     Qt6::Core
     Qt6::Gui
+    Qt6::Multimedia
     Qt6::Network
     Qt6::Sql
     kfr_dsp

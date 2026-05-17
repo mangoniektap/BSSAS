@@ -21,6 +21,7 @@
 #include "LocalizationIntestinalSound.h"
 #include "Multi_featureJointDetection.h"
 #include "RecognitionServiceManager.h"
+#include "RealtimeAudioMonitor.h"
 #include "SignalDFTCalculation.h"
 #include "SignalPreprocessing.h"
 #include "SystemStatusMonitor.h"
@@ -44,6 +45,7 @@ int main(int argc, char *argv[])
     GenerateManager generateManager(&app);
     AdaptiveDownsampling adaptiveDownsampling;
     SignalDFTCalculation signalDFTCalculation;
+    RealtimeAudioMonitor realtimeAudioMonitor(daqManager, &app);
     RecognitionServiceManager recognitionServiceManager(&app);
     UpdateManager updateManager(&app);
     DebugTerminalManager debugTerminalManager(&app);
@@ -67,6 +69,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("generateManager", &generateManager);
     engine.rootContext()->setContextProperty("adaptiveDownsampling", &adaptiveDownsampling);
     engine.rootContext()->setContextProperty("signalDFTCalculation", &signalDFTCalculation);
+    engine.rootContext()->setContextProperty("realtimeAudioMonitor", &realtimeAudioMonitor);
     engine.rootContext()->setContextProperty(
         "recognitionServiceManager",
         &recognitionServiceManager);
