@@ -73,6 +73,7 @@ public:
         QVector<double> minimaReference;         /**< 参考最小值 */
         QVector<double> previousGain;            /**< 上一帧增益 */
         QVector<double> previousPosterioriSnr;   /**< 上一帧后验信噪比 */
+        QVector<double> previousPowerSpectrum;   /**< 上一帧功率谱 */
         QVector<double> entropyContributionMean;       /**< 熵贡献均值 */
         QVector<double> entropyContributionVariance;   /**< 熵贡献方差 */
 
@@ -81,6 +82,8 @@ public:
 
         int frameIndex = 0;                 /**< 当前帧序号 */
         int minimaFrameCounter = 0;         /**< 最小值跟踪帧计数器 */
+        int noiseInitStableFrameCount = 0;  /**< 噪声初始化采纳的稳定帧数 */
+        bool hasPreviousPowerSpectrum = false; /**< 是否已有上一帧功率谱 */
     };
 
     /** @brief 离线降噪处理（一次性处理全部数据）

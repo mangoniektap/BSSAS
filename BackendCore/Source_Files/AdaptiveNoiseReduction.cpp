@@ -25,6 +25,20 @@ constexpr double kMinimumPower = 1e-12;
 constexpr double kNormalizationEpsilon = 1e-8;
 constexpr double kEntropyEpsilon = 1e-12;
 constexpr double kEntropyVarianceFloor = 1e-8;
+constexpr double kNonStationaryBypassProbability = 0.70;
+constexpr double kMinimumLearningProbabilityForUpdate = 0.15;
+constexpr double kSpectralFluxBinLower = 0.22;
+constexpr double kSpectralFluxBinUpper = 0.95;
+constexpr double kSpectralFluxFrameLower = 0.08;
+constexpr double kSpectralFluxFrameUpper = 0.32;
+constexpr double kBroadbandRiseRatioLower = 1.8;
+constexpr double kBroadbandRiseRatioUpper = 5.0;
+constexpr double kBroadbandRiseShareLower = 0.18;
+constexpr double kBroadbandRiseShareUpper = 0.42;
+constexpr double kEntropyZScoreLower = 2.0;
+constexpr double kEntropyZScoreUpper = 4.5;
+constexpr double kLocalNonStationaryShareLower = 0.10;
+constexpr double kLocalNonStationaryShareUpper = 0.32;
 
 std::atomic_bool g_debugLoggingEnabled = true;
 
@@ -202,37 +216,6 @@ double singleFrequencyEntropyContribution(double power, double totalPower)
     return -probability * std::log(probability + kEntropyEpsilon);
 }
 
-/** @brief 基于谱熵贡献的 Z-score 动态计算先验 SNR 平滑因子 alpha。
- *         信号的熵贡献偏离历史均值越大，alpha 越小（更倾向于瞬时估计）。
- *  @param entropyContribution 当前帧在某个频点的熵贡献
- *  @param runningMean 历史熵贡献均值
- *  @param runningVariance 历史熵贡献方差
- *  @param parameters ANR 参数配置
- *  @returns 自适应平滑因子，范围 [adaptiveAlphaMinimum, adaptiveAlphaMaximum]
- */
-double adaptiveAlphaFromEntropy(
-    double entropyContribution,
-    double runningMean,
-    double runningVariance,
-    const AdaptiveNoiseReduction::Parameters& parameters)
-{
-    const double variance = std::max(runningVariance, kEntropyVarianceFloor);
-    const double stdDeviation = std::sqrt(variance);
-    const double zScore =
-        std::abs(entropyContribution - runningMean) / std::max(stdDeviation, kEntropyEpsilon);
-    const double normalizedZScore = std::clamp(
-        zScore / std::max(parameters.adaptiveAlphaZScoreRange, 1.0),
-        0.0,
-        1.0);
-    const double alphaSpan =
-        parameters.adaptiveAlphaMaximum - parameters.adaptiveAlphaMinimum;
-
-    return std::clamp(
-        parameters.adaptiveAlphaMaximum - alphaSpan * normalizedZScore,
-        parameters.adaptiveAlphaMinimum,
-        parameters.adaptiveAlphaMaximum);
-}
-
 void updateEntropyStatistics(
     double entropyContribution,
     double trackingRate,
@@ -276,6 +259,7 @@ void initializeStreamingState(
     state.minimaReference.fill(std::numeric_limits<double>::max(), halfBinCount);
     state.previousGain.fill(1.0, halfBinCount);
     state.previousPosterioriSnr.fill(1.0, halfBinCount);
+    state.previousPowerSpectrum.fill(kMinimumPower, halfBinCount);
     state.entropyContributionMean.fill(0.0, halfBinCount);
     state.entropyContributionVariance.fill(0.0, halfBinCount);
 
@@ -284,6 +268,8 @@ void initializeStreamingState(
 
     state.frameIndex = 0;
     state.minimaFrameCounter = 0;
+    state.noiseInitStableFrameCount = 0;
+    state.hasPreviousPowerSpectrum = false;
     state.initialized = frameLength > 0 && hopLength > 0;
 }
 
@@ -370,6 +356,469 @@ void applyGainCurveToSpectrum(
                 spectrum[mirroredBin] *= gain;
             }
         }
+    }
+}
+
+double probabilityFromRange(double lower, double upper, double value)
+{
+    if (upper <= lower) {
+        return value >= upper ? 1.0 : 0.0;
+    }
+
+    const double normalized = std::clamp((value - lower) / (upper - lower), 0.0, 1.0);
+    return normalized * normalized * (3.0 - 2.0 * normalized);
+}
+
+double positiveLogRise(double value, double reference)
+{
+    return std::max(
+        0.0,
+        std::log(std::max(value, kMinimumPower)) -
+            std::log(std::max(reference, kMinimumPower)));
+}
+
+double entropyAnomalyProbability(
+    double entropyContribution,
+    double runningMean,
+    double runningVariance)
+{
+    const double variance = std::max(runningVariance, kEntropyVarianceFloor);
+    const double zScore =
+        std::abs(entropyContribution - runningMean) /
+        std::max(std::sqrt(variance), kEntropyEpsilon);
+    return probabilityFromRange(kEntropyZScoreLower, kEntropyZScoreUpper, zScore);
+}
+
+double transientProbability(
+    const QVector<float>& analysisFrame,
+    const AdaptiveNoiseReduction::Parameters& parameters)
+{
+    const double crestThreshold = std::max(parameters.transientCrestFactor, 1.0);
+    return probabilityFromRange(
+        std::max(1.0, crestThreshold * 0.65),
+        crestThreshold,
+        computeCrestFactor(analysisFrame));
+}
+
+struct LearningDecision
+{
+    QVector<double> learningProbability;
+    QVector<double> entropyContribution;
+    double frameNonStationaryProbability = 0.0;
+    bool bypassFrame = false;
+};
+
+LearningDecision makeLearningDecision(
+    const QVector<float>& analysisFrame,
+    const QVector<double>& powerSpectrum,
+    const QVector<double>& previousPowerSpectrum,
+    bool hasPreviousPowerSpectrum,
+    int noiseInitStableFrameCount,
+    const QVector<double>& smoothedPsd,
+    const QVector<double>& noisePsd,
+    const QVector<double>& minimaCurrent,
+    const QVector<double>& minimaReference,
+    const QVector<double>& entropyContributionMean,
+    const QVector<double>& entropyContributionVariance,
+    const AdaptiveNoiseReduction::Parameters& parameters)
+{
+    const int binCount = powerSpectrum.size();
+    LearningDecision decision;
+    decision.learningProbability.fill(1.0, binCount);
+    decision.entropyContribution.fill(0.0, binCount);
+
+    if (binCount <= 0) {
+        return decision;
+    }
+
+    const bool hasStableNoiseModel =
+        noiseInitStableFrameCount > 0 &&
+        smoothedPsd.size() == binCount &&
+        noisePsd.size() == binCount &&
+        minimaCurrent.size() == binCount &&
+        minimaReference.size() == binCount;
+    const bool hasPreviousSpectrum =
+        noiseInitStableFrameCount >= 2 &&
+        hasPreviousPowerSpectrum &&
+        previousPowerSpectrum.size() == binCount;
+    const bool hasEntropyStatistics =
+        noiseInitStableFrameCount >= 2 &&
+        entropyContributionMean.size() == binCount &&
+        entropyContributionVariance.size() == binCount;
+
+    const double totalPower =
+        std::accumulate(powerSpectrum.cbegin(), powerSpectrum.cend(), 0.0);
+    const double frameTransientProbability =
+        transientProbability(analysisFrame, parameters);
+    const double spectrumSmoothing =
+        std::clamp(parameters.spectrumSmoothing, 0.0, 0.995);
+
+    QVector<double> binSuppressionProbability(binCount, 0.0);
+
+    double spectralFluxSum = 0.0;
+    int spectralFluxHighBinCount = 0;
+    double broadbandRiseSum = 0.0;
+    int broadbandRiseHighBinCount = 0;
+    double entropyAnomalySum = 0.0;
+    int entropyAnomalyHighBinCount = 0;
+    int localNonStationaryBinCount = 0;
+
+    for (int bin = 0; bin < binCount; ++bin) {
+        const double power = std::max(powerSpectrum[bin], kMinimumPower);
+        decision.entropyContribution[bin] =
+            singleFrequencyEntropyContribution(power, totalPower);
+
+        double spectralFluxProbability = 0.0;
+        if (hasPreviousSpectrum) {
+            const double logRise = positiveLogRise(power, previousPowerSpectrum[bin]);
+            spectralFluxSum += logRise;
+            spectralFluxProbability =
+                probabilityFromRange(kSpectralFluxBinLower, kSpectralFluxBinUpper, logRise);
+            if (spectralFluxProbability >= 0.5) {
+                ++spectralFluxHighBinCount;
+            }
+        }
+
+        double speechPresenceProbability = 0.0;
+        double broadbandRiseProbability = 0.0;
+        if (hasStableNoiseModel) {
+            const double minimaEstimate = std::max(
+                std::min(minimaCurrent[bin], minimaReference[bin]),
+                kMinimumPower);
+            const double candidateSmoothedPsd =
+                spectrumSmoothing * std::max(smoothedPsd[bin], kMinimumPower) +
+                (1.0 - spectrumSmoothing) * power;
+            const double minimaRatio = candidateSmoothedPsd / minimaEstimate;
+            const double ratioProbability = probabilityFromRange(
+                parameters.ratioSpeechPresenceLower,
+                parameters.ratioSpeechPresenceUpper,
+                minimaRatio);
+
+            const double posteriorFromOldNoise =
+                std::clamp(power / std::max(noisePsd[bin], kMinimumPower), 0.0, 1000.0);
+            const double posteriorProbability = probabilityFromRange(
+                1.0,
+                std::max(parameters.posterioriSnrSpeechUpper, 1.01),
+                posteriorFromOldNoise);
+            speechPresenceProbability =
+                std::max(ratioProbability, posteriorProbability);
+
+            const double broadbandLogRise =
+                positiveLogRise(power, std::max(noisePsd[bin], minimaEstimate));
+            broadbandRiseSum += broadbandLogRise;
+            broadbandRiseProbability = probabilityFromRange(
+                std::log(kBroadbandRiseRatioLower),
+                std::log(kBroadbandRiseRatioUpper),
+                broadbandLogRise);
+            if (broadbandRiseProbability >= 0.5) {
+                ++broadbandRiseHighBinCount;
+            }
+        }
+
+        double entropyProbability = 0.0;
+        if (hasEntropyStatistics) {
+            entropyProbability = entropyAnomalyProbability(
+                decision.entropyContribution[bin],
+                entropyContributionMean[bin],
+                entropyContributionVariance[bin]);
+            entropyAnomalySum += entropyProbability;
+            if (entropyProbability >= 0.5) {
+                ++entropyAnomalyHighBinCount;
+            }
+        }
+
+        binSuppressionProbability[bin] = std::max(
+            std::max(speechPresenceProbability, spectralFluxProbability),
+            std::max(broadbandRiseProbability, entropyProbability));
+        if (binSuppressionProbability[bin] >= 0.55) {
+            ++localNonStationaryBinCount;
+        }
+    }
+
+    const double inverseBinCount = 1.0 / static_cast<double>(binCount);
+    const double spectralFluxFrameProbability = hasPreviousSpectrum
+        ? std::max(
+              probabilityFromRange(
+                  kSpectralFluxFrameLower,
+                  kSpectralFluxFrameUpper,
+                  spectralFluxSum * inverseBinCount),
+              probabilityFromRange(
+                  kLocalNonStationaryShareLower,
+                  kLocalNonStationaryShareUpper,
+                  static_cast<double>(spectralFluxHighBinCount) * inverseBinCount))
+        : 0.0;
+    const double broadbandRiseFrameProbability = hasStableNoiseModel
+        ? std::max(
+              probabilityFromRange(
+                  std::log(1.25),
+                  std::log(2.20),
+                  broadbandRiseSum * inverseBinCount),
+              probabilityFromRange(
+                  kBroadbandRiseShareLower,
+                  kBroadbandRiseShareUpper,
+                  static_cast<double>(broadbandRiseHighBinCount) * inverseBinCount))
+        : 0.0;
+    const double entropyFrameProbability = hasEntropyStatistics
+        ? std::max(
+              probabilityFromRange(0.18, 0.45, entropyAnomalySum * inverseBinCount),
+              probabilityFromRange(
+                  kLocalNonStationaryShareLower,
+                  kLocalNonStationaryShareUpper,
+                  static_cast<double>(entropyAnomalyHighBinCount) * inverseBinCount))
+        : 0.0;
+    const double localFrameProbability = probabilityFromRange(
+        kLocalNonStationaryShareLower,
+        kLocalNonStationaryShareUpper,
+        static_cast<double>(localNonStationaryBinCount) * inverseBinCount);
+
+    const double frameSuppressionProbability = std::max(
+        std::max(frameTransientProbability, spectralFluxFrameProbability),
+        std::max(broadbandRiseFrameProbability, entropyFrameProbability));
+    decision.frameNonStationaryProbability =
+        std::max(frameSuppressionProbability, localFrameProbability);
+    decision.bypassFrame =
+        decision.frameNonStationaryProbability >= kNonStationaryBypassProbability;
+
+    for (int bin = 0; bin < binCount; ++bin) {
+        const double learningSuppression = std::max(
+            binSuppressionProbability[bin],
+            frameSuppressionProbability);
+        decision.learningProbability[bin] =
+            std::clamp(1.0 - learningSuppression, 0.0, 1.0);
+    }
+
+    return decision;
+}
+
+void updateStationaryNoiseModel(
+    const QVector<double>& powerSpectrum,
+    const LearningDecision& decision,
+    const AdaptiveNoiseReduction::Parameters& parameters,
+    QVector<double>& smoothedPsd,
+    QVector<double>& noisePsd,
+    QVector<double>& minimaCurrent,
+    QVector<double>& minimaReference,
+    QVector<double>& entropyContributionMean,
+    QVector<double>& entropyContributionVariance,
+    int& minimaFrameCounter,
+    int& noiseInitStableFrameCount)
+{
+    if (decision.bypassFrame || powerSpectrum.isEmpty()) {
+        return;
+    }
+
+    const int binCount = powerSpectrum.size();
+    const bool firstStableNoiseFrame = noiseInitStableFrameCount <= 0;
+    if (firstStableNoiseFrame) {
+        for (int bin = 0; bin < binCount; ++bin) {
+            const double power = std::max(powerSpectrum[bin], kMinimumPower);
+            smoothedPsd[bin] = power;
+            noisePsd[bin] = power;
+            minimaCurrent[bin] = power;
+            minimaReference[bin] = power;
+            entropyContributionMean[bin] = decision.entropyContribution[bin];
+            entropyContributionVariance[bin] = 0.0;
+        }
+        noiseInitStableFrameCount = 1;
+        return;
+    }
+
+    const bool useNoiseInit =
+        noiseInitStableFrameCount < parameters.noiseInitFrameCount;
+    const double spectrumSmoothing =
+        std::clamp(parameters.spectrumSmoothing, 0.0, 0.995);
+    const double entropyTrackingRate =
+        std::clamp(parameters.entropyTrackingRate, 0.01, 1.0);
+
+    for (int bin = 0; bin < binCount; ++bin) {
+        const double learningProbability = decision.learningProbability[bin];
+        if (learningProbability < kMinimumLearningProbabilityForUpdate) {
+            continue;
+        }
+
+        const double power = std::max(powerSpectrum[bin], kMinimumPower);
+        const double smoothedCandidate =
+            spectrumSmoothing * smoothedPsd[bin] +
+            (1.0 - spectrumSmoothing) * power;
+        smoothedPsd[bin] =
+            (1.0 - learningProbability) * smoothedPsd[bin] +
+            learningProbability * smoothedCandidate;
+        minimaCurrent[bin] = std::min(minimaCurrent[bin], smoothedPsd[bin]);
+
+        if (useNoiseInit) {
+            const double initBlend =
+                learningProbability /
+                static_cast<double>(noiseInitStableFrameCount + 1);
+            noisePsd[bin] =
+                (1.0 - initBlend) * noisePsd[bin] +
+                initBlend * power;
+        } else {
+            const double noiseUpdateAlpha =
+                parameters.noiseUpdateAlphaSpeech * (1.0 - learningProbability) +
+                parameters.noiseUpdateAlphaNoiseOnly * learningProbability;
+            noisePsd[bin] =
+                noiseUpdateAlpha * noisePsd[bin] +
+                (1.0 - noiseUpdateAlpha) * power;
+        }
+        noisePsd[bin] = std::max(noisePsd[bin], kMinimumPower);
+
+        updateEntropyStatistics(
+            decision.entropyContribution[bin],
+            entropyTrackingRate,
+            entropyContributionMean[bin],
+            entropyContributionVariance[bin]);
+    }
+
+    if (useNoiseInit) {
+        ++noiseInitStableFrameCount;
+        return;
+    }
+
+    ++minimaFrameCounter;
+    if (minimaFrameCounter >= parameters.minTrackingFrames) {
+        minimaReference = minimaCurrent;
+        minimaCurrent = smoothedPsd;
+        minimaFrameCounter = 0;
+    }
+}
+
+void applyStationaryNoiseReductionGain(
+    QVector<std::complex<double>>& spectrum,
+    const QVector<double>& powerSpectrum,
+    const LearningDecision& decision,
+    const AdaptiveNoiseReduction::Parameters& parameters,
+    const QVector<double>& noisePsd,
+    QVector<double>& previousGain,
+    QVector<double>& previousPosterioriSnr)
+{
+    if (decision.bypassFrame || powerSpectrum.isEmpty()) {
+        return;
+    }
+
+    const int binCount = powerSpectrum.size();
+    QVector<double> gainCurve(binCount, 1.0);
+    QVector<double> posterioriSnrValues(binCount, 1.0);
+    const double adaptiveAlpha =
+        std::clamp(parameters.adaptiveAlphaMaximum, 0.0, 0.995);
+
+    for (int bin = 0; bin < binCount; ++bin) {
+        const double learningProbability = decision.learningProbability[bin];
+        if (learningProbability < kMinimumLearningProbabilityForUpdate) {
+            gainCurve[bin] = 1.0;
+            continue;
+        }
+
+        const double posterioriSnr =
+            std::clamp(
+                powerSpectrum[bin] / std::max(noisePsd[bin], kMinimumPower),
+                0.0,
+                1000.0);
+        posterioriSnrValues[bin] = posterioriSnr;
+
+        const double previousEnhancedSnrEstimate =
+            previousGain[bin] * previousGain[bin] * previousPosterioriSnr[bin];
+        const double prioriSnr = std::clamp(
+            adaptiveAlpha * previousEnhancedSnrEstimate +
+                (1.0 - adaptiveAlpha) * std::max(posterioriSnr - 1.0, 0.0),
+            parameters.minPrioriSnr,
+            parameters.maxPrioriSnr);
+
+        const double v = std::max(
+            (prioriSnr * posterioriSnr) / (1.0 + prioriSnr),
+            kMinimumPower);
+        const double mmseWeight = prioriSnr / (1.0 + prioriSnr);
+        double gain = mmseWeight * std::exp(0.5 * exponentialIntegralE1(v));
+        if (!std::isfinite(gain)) {
+            gain = parameters.minGain;
+        }
+
+        const double learningAwareGain =
+            learningProbability * gain + (1.0 - learningProbability);
+        gainCurve[bin] =
+            std::clamp(learningAwareGain, parameters.minGain, 1.0);
+    }
+
+    smoothGainCurve(gainCurve, previousGain, parameters);
+    for (int bin = 0; bin < binCount; ++bin) {
+        if (decision.learningProbability[bin] < kMinimumLearningProbabilityForUpdate) {
+            gainCurve[bin] = 1.0;
+        }
+    }
+
+    applyGainCurveToSpectrum(spectrum, gainCurve, parameters.frameLength);
+
+    for (int bin = 0; bin < binCount; ++bin) {
+        if (decision.learningProbability[bin] < kMinimumLearningProbabilityForUpdate) {
+            continue;
+        }
+        previousGain[bin] = gainCurve[bin];
+        previousPosterioriSnr[bin] = posterioriSnrValues[bin];
+    }
+}
+
+void processNoiseLearningFrame(
+    const QVector<float>& analysisFrame,
+    QVector<std::complex<double>>& spectrum,
+    const QVector<double>& powerSpectrum,
+    const AdaptiveNoiseReduction::Parameters& parameters,
+    QVector<double>& smoothedPsd,
+    QVector<double>& noisePsd,
+    QVector<double>& minimaCurrent,
+    QVector<double>& minimaReference,
+    QVector<double>& previousGain,
+    QVector<double>& previousPosterioriSnr,
+    QVector<double>& entropyContributionMean,
+    QVector<double>& entropyContributionVariance,
+    QVector<double>& previousPowerSpectrum,
+    bool& hasPreviousPowerSpectrum,
+    int& minimaFrameCounter,
+    int& noiseInitStableFrameCount)
+{
+    const LearningDecision decision = makeLearningDecision(
+        analysisFrame,
+        powerSpectrum,
+        previousPowerSpectrum,
+        hasPreviousPowerSpectrum,
+        noiseInitStableFrameCount,
+        smoothedPsd,
+        noisePsd,
+        minimaCurrent,
+        minimaReference,
+        entropyContributionMean,
+        entropyContributionVariance,
+        parameters);
+
+    if (!decision.bypassFrame) {
+        updateStationaryNoiseModel(
+            powerSpectrum,
+            decision,
+            parameters,
+            smoothedPsd,
+            noisePsd,
+            minimaCurrent,
+            minimaReference,
+            entropyContributionMean,
+            entropyContributionVariance,
+            minimaFrameCounter,
+            noiseInitStableFrameCount);
+        applyStationaryNoiseReductionGain(
+            spectrum,
+            powerSpectrum,
+            decision,
+            parameters,
+            noisePsd,
+            previousGain,
+            previousPosterioriSnr);
+    }
+
+    if (!decision.bypassFrame &&
+        noiseInitStableFrameCount > 0 &&
+        smoothedPsd.size() == powerSpectrum.size()) {
+        previousPowerSpectrum = smoothedPsd;
+        hasPreviousPowerSpectrum = true;
+    } else if (!hasPreviousPowerSpectrum) {
+        previousPowerSpectrum = powerSpectrum;
+        hasPreviousPowerSpectrum = true;
     }
 }
 
@@ -503,6 +952,7 @@ QVector<float> AdaptiveNoiseReduction::denoise(
     QVector<double> minimaReference(halfBinCount, std::numeric_limits<double>::max());
     QVector<double> previousGain(halfBinCount, 1.0);
     QVector<double> previousPosterioriSnr(halfBinCount, 1.0);
+    QVector<double> previousPowerSpectrum(halfBinCount, kMinimumPower);
     QVector<double> entropyContributionMean(halfBinCount, 0.0);
     QVector<double> entropyContributionVariance(halfBinCount, 0.0);
 
@@ -510,6 +960,8 @@ QVector<float> AdaptiveNoiseReduction::denoise(
     QVector<double> powerSpectrum(halfBinCount, kMinimumPower);
 
     int minimaFrameCounter = 0;
+    int noiseInitStableFrameCount = 0;
+    bool hasPreviousPowerSpectrum = false;
 
     for (int frameIndex = 0; frameIndex < frameCount; ++frameIndex) {
         const int frameStart = frameIndex * parameters.hopLength;
@@ -528,132 +980,23 @@ QVector<float> AdaptiveNoiseReduction::denoise(
             powerSpectrum[bin] = std::max(std::norm(spectrum[bin]), kMinimumPower);
         }
 
-        if (frameIndex == 0) {
-            for (int bin = 0; bin < halfBinCount; ++bin) {
-                smoothedPsd[bin] = powerSpectrum[bin];
-                noisePsd[bin] = powerSpectrum[bin];
-                minimaCurrent[bin] = powerSpectrum[bin];
-                minimaReference[bin] = powerSpectrum[bin];
-            }
-        } else {
-            for (int bin = 0; bin < halfBinCount; ++bin) {
-                smoothedPsd[bin] =
-                    parameters.spectrumSmoothing * smoothedPsd[bin] +
-                    (1.0 - parameters.spectrumSmoothing) * powerSpectrum[bin];
-                minimaCurrent[bin] = std::min(minimaCurrent[bin], smoothedPsd[bin]);
-            }
-        }
-
-        const bool useNoiseInit = frameIndex < parameters.noiseInitFrameCount;
-        if (useNoiseInit) {
-            const double initBlend = 1.0 / static_cast<double>(frameIndex + 1);
-            for (int bin = 0; bin < halfBinCount; ++bin) {
-                noisePsd[bin] =
-                    (1.0 - initBlend) * noisePsd[bin] +
-                    initBlend * powerSpectrum[bin];
-            }
-        } else {
-            ++minimaFrameCounter;
-            if (minimaFrameCounter >= parameters.minTrackingFrames) {
-                minimaReference = minimaCurrent;
-                minimaCurrent = smoothedPsd;
-                minimaFrameCounter = 0;
-            }
-        }
-
-        const double totalPower =
-            std::accumulate(powerSpectrum.cbegin(), powerSpectrum.cend(), 0.0);
-        const bool transientFrame =
-            computeCrestFactor(analysisFrame) >= parameters.transientCrestFactor;
-        const double effectiveMinGain = transientFrame
-            ? std::max(parameters.minGain, parameters.transientMinGain)
-            : parameters.minGain;
-        QVector<double> gainCurve(halfBinCount, 1.0);
-
-        for (int bin = 0; bin < halfBinCount; ++bin) {
-            const double power = powerSpectrum[bin];
-
-            if (!useNoiseInit) {
-                const double minimaEstimate = std::max(
-                    std::min(minimaCurrent[bin], minimaReference[bin]),
-                    kMinimumPower);
-                const double minimaRatio = smoothedPsd[bin] / minimaEstimate;
-                const double ratioProbability = std::clamp(
-                    (minimaRatio - parameters.ratioSpeechPresenceLower) /
-                        (parameters.ratioSpeechPresenceUpper -
-                         parameters.ratioSpeechPresenceLower),
-                    0.0,
-                    1.0);
-
-                const double posteriorFromOldNoise =
-                    std::clamp(power / std::max(noisePsd[bin], kMinimumPower), 0.0, 1000.0);
-                const double posteriorProbability = std::clamp(
-                    (posteriorFromOldNoise - 1.0) /
-                        (parameters.posterioriSnrSpeechUpper - 1.0),
-                    0.0,
-                    1.0);
-
-                const double speechPresenceProbability =
-                    std::max(ratioProbability, posteriorProbability);
-
-                const double noiseUpdateAlpha =
-                    parameters.noiseUpdateAlphaSpeech * speechPresenceProbability +
-                    parameters.noiseUpdateAlphaNoiseOnly * (1.0 - speechPresenceProbability);
-                noisePsd[bin] =
-                    noiseUpdateAlpha * noisePsd[bin] +
-                    (1.0 - noiseUpdateAlpha) * power;
-            }
-
-            noisePsd[bin] = std::max(noisePsd[bin], kMinimumPower);
-            const double posterioriSnr = std::clamp(power / noisePsd[bin], 0.0, 1000.0);
-            const double previousEnhancedSnrEstimate =
-                previousGain[bin] * previousGain[bin] * previousPosterioriSnr[bin];
-            const double entropyContribution =
-                singleFrequencyEntropyContribution(power, totalPower);
-
-            double adaptiveAlpha = parameters.adaptiveAlphaMaximum;
-            if (frameIndex == 0) {
-                entropyContributionMean[bin] = entropyContribution;
-                entropyContributionVariance[bin] = 0.0;
-            } else {
-                adaptiveAlpha = adaptiveAlphaFromEntropy(
-                    entropyContribution,
-                    entropyContributionMean[bin],
-                    entropyContributionVariance[bin],
-                    parameters);
-            }
-
-            const double prioriSnr = std::clamp(
-                adaptiveAlpha * previousEnhancedSnrEstimate +
-                    (1.0 - adaptiveAlpha) * std::max(posterioriSnr - 1.0, 0.0),
-                parameters.minPrioriSnr,
-                parameters.maxPrioriSnr);
-
-            const double v = std::max(
-                (prioriSnr * posterioriSnr) / (1.0 + prioriSnr),
-                kMinimumPower);
-            const double mmseWeight = prioriSnr / (1.0 + prioriSnr);
-            double gain = mmseWeight * std::exp(0.5 * exponentialIntegralE1(v));
-
-            if (!std::isfinite(gain)) {
-                gain = effectiveMinGain;
-            }
-            gainCurve[bin] = std::clamp(gain, effectiveMinGain, 1.0);
-
-            if (frameIndex > 0) {
-                updateEntropyStatistics(
-                    entropyContribution,
-                    parameters.entropyTrackingRate,
-                    entropyContributionMean[bin],
-                    entropyContributionVariance[bin]);
-            }
-
-            previousPosterioriSnr[bin] = posterioriSnr;
-        }
-
-        smoothGainCurve(gainCurve, previousGain, parameters);
-        applyGainCurveToSpectrum(spectrum, gainCurve, parameters.frameLength);
-        previousGain = std::move(gainCurve);
+        processNoiseLearningFrame(
+            analysisFrame,
+            spectrum,
+            powerSpectrum,
+            parameters,
+            smoothedPsd,
+            noisePsd,
+            minimaCurrent,
+            minimaReference,
+            previousGain,
+            previousPosterioriSnr,
+            entropyContributionMean,
+            entropyContributionVariance,
+            previousPowerSpectrum,
+            hasPreviousPowerSpectrum,
+            minimaFrameCounter,
+            noiseInitStableFrameCount);
 
         const QVector<double> enhancedFrame =
             KfrDftUtils::computeInverseComplexDftReal(spectrum);
@@ -751,138 +1094,23 @@ QVector<float> AdaptiveNoiseReduction::denoiseStreaming(
                 std::max(std::norm(spectrum[bin]), kMinimumPower);
         }
 
-        if (state.frameIndex == 0) {
-            for (int bin = 0; bin < halfBinCount; ++bin) {
-                state.smoothedPsd[bin] = state.powerSpectrum[bin];
-                state.noisePsd[bin] = state.powerSpectrum[bin];
-                state.minimaCurrent[bin] = state.powerSpectrum[bin];
-                state.minimaReference[bin] = state.powerSpectrum[bin];
-            }
-        } else {
-            for (int bin = 0; bin < halfBinCount; ++bin) {
-                state.smoothedPsd[bin] =
-                    parameters.spectrumSmoothing * state.smoothedPsd[bin] +
-                    (1.0 - parameters.spectrumSmoothing) * state.powerSpectrum[bin];
-                state.minimaCurrent[bin] =
-                    std::min(state.minimaCurrent[bin], state.smoothedPsd[bin]);
-            }
-        }
-
-        const bool useNoiseInit = state.frameIndex < parameters.noiseInitFrameCount;
-        if (useNoiseInit) {
-            const double initBlend = 1.0 / static_cast<double>(state.frameIndex + 1);
-            for (int bin = 0; bin < halfBinCount; ++bin) {
-                state.noisePsd[bin] =
-                    (1.0 - initBlend) * state.noisePsd[bin] +
-                    initBlend * state.powerSpectrum[bin];
-            }
-        } else {
-            ++state.minimaFrameCounter;
-            if (state.minimaFrameCounter >= parameters.minTrackingFrames) {
-                state.minimaReference = state.minimaCurrent;
-                state.minimaCurrent = state.smoothedPsd;
-                state.minimaFrameCounter = 0;
-            }
-        }
-
-        const double totalPower =
-            std::accumulate(state.powerSpectrum.cbegin(), state.powerSpectrum.cend(), 0.0);
-        const bool transientFrame =
-            computeCrestFactor(state.analysisFrame) >= parameters.transientCrestFactor;
-        const double effectiveMinGain = transientFrame
-            ? std::max(parameters.minGain, parameters.transientMinGain)
-            : parameters.minGain;
-        QVector<double> gainCurve(halfBinCount, 1.0);
-
-        for (int bin = 0; bin < halfBinCount; ++bin) {
-            const double power = state.powerSpectrum[bin];
-
-            if (!useNoiseInit) {
-                const double minimaEstimate = std::max(
-                    std::min(state.minimaCurrent[bin], state.minimaReference[bin]),
-                    kMinimumPower);
-                const double minimaRatio = state.smoothedPsd[bin] / minimaEstimate;
-                const double ratioProbability = std::clamp(
-                    (minimaRatio - parameters.ratioSpeechPresenceLower) /
-                        (parameters.ratioSpeechPresenceUpper -
-                         parameters.ratioSpeechPresenceLower),
-                    0.0,
-                    1.0);
-
-                const double posteriorFromOldNoise = std::clamp(
-                    power / std::max(state.noisePsd[bin], kMinimumPower),
-                    0.0,
-                    1000.0);
-                const double posteriorProbability = std::clamp(
-                    (posteriorFromOldNoise - 1.0) /
-                        (parameters.posterioriSnrSpeechUpper - 1.0),
-                    0.0,
-                    1.0);
-
-                const double speechPresenceProbability =
-                    std::max(ratioProbability, posteriorProbability);
-
-                const double noiseUpdateAlpha =
-                    parameters.noiseUpdateAlphaSpeech * speechPresenceProbability +
-                    parameters.noiseUpdateAlphaNoiseOnly *
-                        (1.0 - speechPresenceProbability);
-                state.noisePsd[bin] =
-                    noiseUpdateAlpha * state.noisePsd[bin] +
-                    (1.0 - noiseUpdateAlpha) * power;
-            }
-
-            state.noisePsd[bin] = std::max(state.noisePsd[bin], kMinimumPower);
-            const double posterioriSnr =
-                std::clamp(power / state.noisePsd[bin], 0.0, 1000.0);
-            const double previousEnhancedSnrEstimate =
-                state.previousGain[bin] * state.previousGain[bin] *
-                state.previousPosterioriSnr[bin];
-            const double entropyContribution =
-                singleFrequencyEntropyContribution(power, totalPower);
-
-            double adaptiveAlpha = parameters.adaptiveAlphaMaximum;
-            if (state.frameIndex == 0) {
-                state.entropyContributionMean[bin] = entropyContribution;
-                state.entropyContributionVariance[bin] = 0.0;
-            } else {
-                adaptiveAlpha = adaptiveAlphaFromEntropy(
-                    entropyContribution,
-                    state.entropyContributionMean[bin],
-                    state.entropyContributionVariance[bin],
-                    parameters);
-            }
-
-            const double prioriSnr = std::clamp(
-                adaptiveAlpha * previousEnhancedSnrEstimate +
-                    (1.0 - adaptiveAlpha) * std::max(posterioriSnr - 1.0, 0.0),
-                parameters.minPrioriSnr,
-                parameters.maxPrioriSnr);
-
-            const double v = std::max(
-                (prioriSnr * posterioriSnr) / (1.0 + prioriSnr),
-                kMinimumPower);
-            const double mmseWeight = prioriSnr / (1.0 + prioriSnr);
-            double gain = mmseWeight * std::exp(0.5 * exponentialIntegralE1(v));
-
-            if (!std::isfinite(gain)) {
-                gain = effectiveMinGain;
-            }
-            gainCurve[bin] = std::clamp(gain, effectiveMinGain, 1.0);
-
-            if (state.frameIndex > 0) {
-                updateEntropyStatistics(
-                    entropyContribution,
-                    parameters.entropyTrackingRate,
-                    state.entropyContributionMean[bin],
-                    state.entropyContributionVariance[bin]);
-            }
-
-            state.previousPosterioriSnr[bin] = posterioriSnr;
-        }
-
-        smoothGainCurve(gainCurve, state.previousGain, parameters);
-        applyGainCurveToSpectrum(spectrum, gainCurve, frameLength);
-        state.previousGain = std::move(gainCurve);
+        processNoiseLearningFrame(
+            state.analysisFrame,
+            spectrum,
+            state.powerSpectrum,
+            parameters,
+            state.smoothedPsd,
+            state.noisePsd,
+            state.minimaCurrent,
+            state.minimaReference,
+            state.previousGain,
+            state.previousPosterioriSnr,
+            state.entropyContributionMean,
+            state.entropyContributionVariance,
+            state.previousPowerSpectrum,
+            state.hasPreviousPowerSpectrum,
+            state.minimaFrameCounter,
+            state.noiseInitStableFrameCount);
 
         const QVector<double> enhancedFrame =
             KfrDftUtils::computeInverseComplexDftReal(spectrum);
