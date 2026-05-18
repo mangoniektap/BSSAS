@@ -89,6 +89,17 @@ Window {
         value: AppState.importAdaptiveNoiseReductionTransientSuppressionEnabled
     }
 
+    Binding { target: signalPreprocessing; property: "importScientificFilterEnabled"; value: AppState.importScientificFilterEnabled }
+    Binding { target: signalPreprocessing; property: "importScientificFilterPrototype"; value: AppState.importScientificFilterPrototype }
+    Binding { target: signalPreprocessing; property: "importScientificFilterType"; value: AppState.importScientificFilterType }
+    Binding { target: signalPreprocessing; property: "importScientificFilterOrder"; value: AppState.importScientificFilterOrder }
+    Binding { target: signalPreprocessing; property: "importScientificFilterCutoffFrequencyHz"; value: AppState.importScientificFilterCutoffFrequencyHz }
+    Binding { target: signalPreprocessing; property: "importScientificFilterLowCutoffFrequencyHz"; value: AppState.importScientificFilterLowCutoffFrequencyHz }
+    Binding { target: signalPreprocessing; property: "importScientificFilterHighCutoffFrequencyHz"; value: AppState.importScientificFilterHighCutoffFrequencyHz }
+    Binding { target: signalPreprocessing; property: "importScientificFilterTransitionBandwidthHz"; value: AppState.importScientificFilterTransitionBandwidthHz }
+    Binding { target: signalPreprocessing; property: "importScientificFilterStopbandAttenuationDb"; value: AppState.importScientificFilterStopbandAttenuationDb }
+    Binding { target: signalPreprocessing; property: "importScientificFilterPassbandRippleDb"; value: AppState.importScientificFilterPassbandRippleDb }
+
     Binding {
         target: signalPreprocessing
         property: "realtimeAdaptiveNoiseReductionLevel"
@@ -112,6 +123,17 @@ Window {
         property: "realtimeAdaptiveNoiseReductionTransientSuppressionEnabled"
         value: AppState.realtimeAdaptiveNoiseReductionTransientSuppressionEnabled
     }
+
+    Binding { target: signalPreprocessing; property: "realtimeScientificFilterEnabled"; value: AppState.realtimeScientificFilterEnabled }
+    Binding { target: signalPreprocessing; property: "realtimeScientificFilterPrototype"; value: AppState.realtimeScientificFilterPrototype }
+    Binding { target: signalPreprocessing; property: "realtimeScientificFilterType"; value: AppState.realtimeScientificFilterType }
+    Binding { target: signalPreprocessing; property: "realtimeScientificFilterOrder"; value: AppState.realtimeScientificFilterOrder }
+    Binding { target: signalPreprocessing; property: "realtimeScientificFilterCutoffFrequencyHz"; value: AppState.realtimeScientificFilterCutoffFrequencyHz }
+    Binding { target: signalPreprocessing; property: "realtimeScientificFilterLowCutoffFrequencyHz"; value: AppState.realtimeScientificFilterLowCutoffFrequencyHz }
+    Binding { target: signalPreprocessing; property: "realtimeScientificFilterHighCutoffFrequencyHz"; value: AppState.realtimeScientificFilterHighCutoffFrequencyHz }
+    Binding { target: signalPreprocessing; property: "realtimeScientificFilterTransitionBandwidthHz"; value: AppState.realtimeScientificFilterTransitionBandwidthHz }
+    Binding { target: signalPreprocessing; property: "realtimeScientificFilterStopbandAttenuationDb"; value: AppState.realtimeScientificFilterStopbandAttenuationDb }
+    Binding { target: signalPreprocessing; property: "realtimeScientificFilterPassbandRippleDb"; value: AppState.realtimeScientificFilterPassbandRippleDb }
 
     Component.onCompleted: Qt.callLater(function() {
         updateManager.checkForUpdatesOnStartup()

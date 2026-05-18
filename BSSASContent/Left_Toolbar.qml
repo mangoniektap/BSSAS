@@ -211,7 +211,7 @@ Item {
                                 if (control.pressed) return Theme.secondaryPressedBg
                                 if (control.checked) return Theme.primaryLight
                                 if (control.hovered) return Theme.primaryLighter
-                                return "transparent"
+                                return Qt.rgba(Theme.primaryLighter.r, Theme.primaryLighter.g, Theme.primaryLighter.b, 0)
                             }
 
                             Behavior on color {

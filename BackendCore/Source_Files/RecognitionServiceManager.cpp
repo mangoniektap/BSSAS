@@ -132,6 +132,7 @@ void RecognitionServiceManager::recognizeFile(
     }
 
     m_cancelRequested = false;
+    setResult(QVariantMap());
     setRawResponseJson(QString());
     setLastRequestId(QString());
     setUploadProgress(0, 0);

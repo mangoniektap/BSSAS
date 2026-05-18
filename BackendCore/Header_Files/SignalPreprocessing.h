@@ -9,6 +9,7 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <QObject>
+#include <QVariantMap>
 #include <QVector>
 #include <array>
 #include <memory>
@@ -29,6 +30,39 @@ enum NotchFrequencyMode
     NotchFrequencyAdaptive = 1
 };
 
+enum ScientificFilterPrototype
+{
+    ScientificFilterBessel = 0,
+    ScientificFilterButterworth = 1,
+    ScientificFilterChebyshevI = 2,
+    ScientificFilterElliptic = 3
+};
+
+enum ScientificFilterType
+{
+    ScientificFilterLowPass = 0,
+    ScientificFilterHighPass = 1,
+    ScientificFilterBandPass = 2,
+    ScientificFilterBandStop = 3
+};
+
+constexpr size_t ScientificFilterSectionCapacity = 16;
+
+/** @brief 科学滤波器配置，用于基础带通之后的针对性 IIR 滤波。 */
+struct ScientificFilterConfig
+{
+    bool enabled = false;                                      /**< 是否启用科学滤波器 */
+    int prototype = ScientificFilterButterworth;               /**< IIR 原型类型 */
+    int filterType = ScientificFilterLowPass;                  /**< 滤波类型 */
+    int order = 2;                                             /**< 滤波器阶数 */
+    double cutoffFrequencyHz = 500.0;                          /**< 单截止频率 */
+    double lowCutoffFrequencyHz = 80.0;                        /**< 低端截止频率 */
+    double highCutoffFrequencyHz = 600.0;                      /**< 高端截止频率 */
+    double transitionBandwidthHz = 50.0;                       /**< 过渡带宽 */
+    double stopbandAttenuationDb = 60.0;                       /**< 阻带衰减 */
+    double passbandRippleDb = 0.5;                             /**< 通带纹波 */
+};
+
 /** @brief 信号预处理选项，集中管理各类预处理开关与增益配置。 */
 struct SignalPreprocessOptions
 {
@@ -36,6 +70,7 @@ struct SignalPreprocessOptions
     bool notchEnabled = true;                     /**< 陷波滤波是否启用 */
     int notchFrequencyMode = NotchFrequencyFixed; /**< 陷波中心频率模式 */
     bool firFilterEnabled = false;                /**< FIR 滤波是否启用 */
+    ScientificFilterConfig scientificFilter;      /**< 科学滤波器配置 */
     bool activeNoiseCancellationEnabled = true;   /**< 主动降噪 (ANC) 是否启用 */
     bool adaptiveNoiseReductionEnabled = true;    /**< 自适应降噪 (ANR) 是否启用 */
     AdaptiveNoiseReduction::Parameters adaptiveNoiseReductionParameters;
@@ -51,6 +86,9 @@ struct SignalPreFilterState
     kfr::iir_state<double, 5> bandpassState{ kfr::iir_params<double, 5>() };
     std::unique_ptr<kfr::fir_state<double, double>> bandpassFirState;
     int bandpassFirOrder = 0;
+    kfr::iir_state<double, ScientificFilterSectionCapacity> scientificFilterState{
+        kfr::iir_params<double, ScientificFilterSectionCapacity>()
+    };
     kfr::iir_state<double, 5> notchState{ kfr::iir_params<double, 5>() };
     QVector<float> adaptiveNotchHistory;
     std::array<double, 3> adaptiveNotchFrequencies{};
@@ -88,6 +126,7 @@ private:
     /** @brief 初始化预滤波器 @param sampleRate 采样率 @param options 预处理选项 */
     void initPreFilter(int sampleRate, const SignalPreprocessOptions& options);
     bool m_preFilterBandpassFirFilterEnabled = false;
+    ScientificFilterConfig m_preFilterScientificFilterConfig;
 
     QMutex m_dataMutex;                                                                 /**< 数据互斥锁 */
     int m_currentChannel = 0;                                                           /**< 当前通道号 */
@@ -97,6 +136,7 @@ private:
     bool m_preFilterNotchEnabled = true;                                                /**< 预滤波陷波开关 */
     int m_preFilterNotchFrequencyMode = NotchFrequencyFixed;                            /**< 预滤波陷波频率模式 */
     bool m_hasBandpassFilterState = false;                                              /**< 是否已有带通滤波状态 */
+    bool m_hasScientificFilterState = false;                                            /**< 是否已有科学滤波状态 */
     bool m_hasNotchFilterState = false;                                                 /**< 是否已有陷波滤波状态 */
     std::array<SignalPreFilterState, 8> m_preFilterStates{};                            /**< 8通道预滤波器状态 */
     std::array<AdaptiveNoiseReduction::StreamingState, 8> m_realtimeAdaptiveStates{};   /**< 8通道自适应降噪流式状态 */
@@ -191,6 +231,66 @@ class SignalPreprocessing : public QObject
         READ importFirFilterEnabled
         WRITE setImportFirFilterEnabled
         NOTIFY importFirFilterEnabledChanged)
+    /** @brief 导入模式科学滤波器是否启用 */
+    Q_PROPERTY(
+        bool importScientificFilterEnabled
+        READ importScientificFilterEnabled
+        WRITE setImportScientificFilterEnabled
+        NOTIFY importScientificFilterChanged)
+    /** @brief 导入模式科学滤波器原型 */
+    Q_PROPERTY(
+        int importScientificFilterPrototype
+        READ importScientificFilterPrototype
+        WRITE setImportScientificFilterPrototype
+        NOTIFY importScientificFilterChanged)
+    /** @brief 导入模式科学滤波器类型 */
+    Q_PROPERTY(
+        int importScientificFilterType
+        READ importScientificFilterType
+        WRITE setImportScientificFilterType
+        NOTIFY importScientificFilterChanged)
+    /** @brief 导入模式科学滤波器阶数 */
+    Q_PROPERTY(
+        int importScientificFilterOrder
+        READ importScientificFilterOrder
+        WRITE setImportScientificFilterOrder
+        NOTIFY importScientificFilterChanged)
+    /** @brief 导入模式科学滤波器单截止频率 */
+    Q_PROPERTY(
+        double importScientificFilterCutoffFrequencyHz
+        READ importScientificFilterCutoffFrequencyHz
+        WRITE setImportScientificFilterCutoffFrequencyHz
+        NOTIFY importScientificFilterChanged)
+    /** @brief 导入模式科学滤波器低端截止频率 */
+    Q_PROPERTY(
+        double importScientificFilterLowCutoffFrequencyHz
+        READ importScientificFilterLowCutoffFrequencyHz
+        WRITE setImportScientificFilterLowCutoffFrequencyHz
+        NOTIFY importScientificFilterChanged)
+    /** @brief 导入模式科学滤波器高端截止频率 */
+    Q_PROPERTY(
+        double importScientificFilterHighCutoffFrequencyHz
+        READ importScientificFilterHighCutoffFrequencyHz
+        WRITE setImportScientificFilterHighCutoffFrequencyHz
+        NOTIFY importScientificFilterChanged)
+    /** @brief 导入模式科学滤波器过渡带宽 */
+    Q_PROPERTY(
+        double importScientificFilterTransitionBandwidthHz
+        READ importScientificFilterTransitionBandwidthHz
+        WRITE setImportScientificFilterTransitionBandwidthHz
+        NOTIFY importScientificFilterChanged)
+    /** @brief 导入模式科学滤波器阻带衰减 */
+    Q_PROPERTY(
+        double importScientificFilterStopbandAttenuationDb
+        READ importScientificFilterStopbandAttenuationDb
+        WRITE setImportScientificFilterStopbandAttenuationDb
+        NOTIFY importScientificFilterChanged)
+    /** @brief 导入模式科学滤波器通带纹波 */
+    Q_PROPERTY(
+        double importScientificFilterPassbandRippleDb
+        READ importScientificFilterPassbandRippleDb
+        WRITE setImportScientificFilterPassbandRippleDb
+        NOTIFY importScientificFilterChanged)
     /** @brief 实时模式全处理是否全部启用 */
     Q_PROPERTY(
         bool realtimeAllProcessingEnabled
@@ -270,6 +370,66 @@ class SignalPreprocessing : public QObject
         READ realtimeFirFilterEnabled
         WRITE setRealtimeFirFilterEnabled
         NOTIFY realtimeFirFilterEnabledChanged)
+    /** @brief 实时模式科学滤波器是否启用 */
+    Q_PROPERTY(
+        bool realtimeScientificFilterEnabled
+        READ realtimeScientificFilterEnabled
+        WRITE setRealtimeScientificFilterEnabled
+        NOTIFY realtimeScientificFilterChanged)
+    /** @brief 实时模式科学滤波器原型 */
+    Q_PROPERTY(
+        int realtimeScientificFilterPrototype
+        READ realtimeScientificFilterPrototype
+        WRITE setRealtimeScientificFilterPrototype
+        NOTIFY realtimeScientificFilterChanged)
+    /** @brief 实时模式科学滤波器类型 */
+    Q_PROPERTY(
+        int realtimeScientificFilterType
+        READ realtimeScientificFilterType
+        WRITE setRealtimeScientificFilterType
+        NOTIFY realtimeScientificFilterChanged)
+    /** @brief 实时模式科学滤波器阶数 */
+    Q_PROPERTY(
+        int realtimeScientificFilterOrder
+        READ realtimeScientificFilterOrder
+        WRITE setRealtimeScientificFilterOrder
+        NOTIFY realtimeScientificFilterChanged)
+    /** @brief 实时模式科学滤波器单截止频率 */
+    Q_PROPERTY(
+        double realtimeScientificFilterCutoffFrequencyHz
+        READ realtimeScientificFilterCutoffFrequencyHz
+        WRITE setRealtimeScientificFilterCutoffFrequencyHz
+        NOTIFY realtimeScientificFilterChanged)
+    /** @brief 实时模式科学滤波器低端截止频率 */
+    Q_PROPERTY(
+        double realtimeScientificFilterLowCutoffFrequencyHz
+        READ realtimeScientificFilterLowCutoffFrequencyHz
+        WRITE setRealtimeScientificFilterLowCutoffFrequencyHz
+        NOTIFY realtimeScientificFilterChanged)
+    /** @brief 实时模式科学滤波器高端截止频率 */
+    Q_PROPERTY(
+        double realtimeScientificFilterHighCutoffFrequencyHz
+        READ realtimeScientificFilterHighCutoffFrequencyHz
+        WRITE setRealtimeScientificFilterHighCutoffFrequencyHz
+        NOTIFY realtimeScientificFilterChanged)
+    /** @brief 实时模式科学滤波器过渡带宽 */
+    Q_PROPERTY(
+        double realtimeScientificFilterTransitionBandwidthHz
+        READ realtimeScientificFilterTransitionBandwidthHz
+        WRITE setRealtimeScientificFilterTransitionBandwidthHz
+        NOTIFY realtimeScientificFilterChanged)
+    /** @brief 实时模式科学滤波器阻带衰减 */
+    Q_PROPERTY(
+        double realtimeScientificFilterStopbandAttenuationDb
+        READ realtimeScientificFilterStopbandAttenuationDb
+        WRITE setRealtimeScientificFilterStopbandAttenuationDb
+        NOTIFY realtimeScientificFilterChanged)
+    /** @brief 实时模式科学滤波器通带纹波 */
+    Q_PROPERTY(
+        double realtimeScientificFilterPassbandRippleDb
+        READ realtimeScientificFilterPassbandRippleDb
+        WRITE setRealtimeScientificFilterPassbandRippleDb
+        NOTIFY realtimeScientificFilterChanged)
     /** @brief 实时模式增益系数 */
     Q_PROPERTY(
         double realtimeGain
@@ -315,6 +475,16 @@ public:
     bool importTransientNoiseSuppressionEnabled() const;
     bool importMotionArtifactReductionEnabled() const;
     bool importFirFilterEnabled() const;
+    bool importScientificFilterEnabled() const;
+    int importScientificFilterPrototype() const;
+    int importScientificFilterType() const;
+    int importScientificFilterOrder() const;
+    double importScientificFilterCutoffFrequencyHz() const;
+    double importScientificFilterLowCutoffFrequencyHz() const;
+    double importScientificFilterHighCutoffFrequencyHz() const;
+    double importScientificFilterTransitionBandwidthHz() const;
+    double importScientificFilterStopbandAttenuationDb() const;
+    double importScientificFilterPassbandRippleDb() const;
     /** @brief 实时模式全处理是否全部启用 @returns 启用状态 */
     bool realtimeAllProcessingEnabled() const;
     bool realtimeBandpassEnabled() const;
@@ -330,6 +500,16 @@ public:
     bool realtimeTransientNoiseSuppressionEnabled() const;
     bool realtimeMotionArtifactReductionEnabled() const;
     bool realtimeFirFilterEnabled() const;
+    bool realtimeScientificFilterEnabled() const;
+    int realtimeScientificFilterPrototype() const;
+    int realtimeScientificFilterType() const;
+    int realtimeScientificFilterOrder() const;
+    double realtimeScientificFilterCutoffFrequencyHz() const;
+    double realtimeScientificFilterLowCutoffFrequencyHz() const;
+    double realtimeScientificFilterHighCutoffFrequencyHz() const;
+    double realtimeScientificFilterTransitionBandwidthHz() const;
+    double realtimeScientificFilterStopbandAttenuationDb() const;
+    double realtimeScientificFilterPassbandRippleDb() const;
     double realtimeGain() const;
 
     /** @brief 设置当前通道 @param channel 通道号 */
@@ -358,6 +538,16 @@ public:
     void setImportMotionArtifactReductionEnabled(bool enabled);
     /** @brief 设置导入模式 FIR 滤波 @param enabled 是否启用 */
     void setImportFirFilterEnabled(bool enabled);
+    void setImportScientificFilterEnabled(bool enabled);
+    void setImportScientificFilterPrototype(int prototype);
+    void setImportScientificFilterType(int filterType);
+    void setImportScientificFilterOrder(int order);
+    void setImportScientificFilterCutoffFrequencyHz(double frequencyHz);
+    void setImportScientificFilterLowCutoffFrequencyHz(double frequencyHz);
+    void setImportScientificFilterHighCutoffFrequencyHz(double frequencyHz);
+    void setImportScientificFilterTransitionBandwidthHz(double bandwidthHz);
+    void setImportScientificFilterStopbandAttenuationDb(double attenuationDb);
+    void setImportScientificFilterPassbandRippleDb(double rippleDb);
     /** @brief 设置实时模式带通滤波 @param enabled 是否启用 */
     void setRealtimeBandpassEnabled(bool enabled);
     /** @brief 设置实时模式陷波滤波 @param enabled 是否启用 */
@@ -380,8 +570,23 @@ public:
     void setRealtimeMotionArtifactReductionEnabled(bool enabled);
     /** @brief 设置实时模式 FIR 滤波 @param enabled 是否启用 */
     void setRealtimeFirFilterEnabled(bool enabled);
+    void setRealtimeScientificFilterEnabled(bool enabled);
+    void setRealtimeScientificFilterPrototype(int prototype);
+    void setRealtimeScientificFilterType(int filterType);
+    void setRealtimeScientificFilterOrder(int order);
+    void setRealtimeScientificFilterCutoffFrequencyHz(double frequencyHz);
+    void setRealtimeScientificFilterLowCutoffFrequencyHz(double frequencyHz);
+    void setRealtimeScientificFilterHighCutoffFrequencyHz(double frequencyHz);
+    void setRealtimeScientificFilterTransitionBandwidthHz(double bandwidthHz);
+    void setRealtimeScientificFilterStopbandAttenuationDb(double attenuationDb);
+    void setRealtimeScientificFilterPassbandRippleDb(double rippleDb);
     /** @brief 设置实时模式增益系数 @param gain 增益值 */
     void setRealtimeGain(double gain);
+
+    /** @brief 计算科学滤波器频响、相位和组延迟预览数据。 */
+    Q_INVOKABLE QVariantMap scientificFilterResponse(
+        const QVariantMap& config,
+        int sampleRate) const;
 
     /** @brief 启动实时预处理流水线 */
     Q_INVOKABLE void startPreprocessing();
@@ -424,6 +629,7 @@ private:
     bool m_importTransientNoiseSuppressionEnabled = true;    /**< 导入: 瞬态噪声抑制开关 */
     bool m_importMotionArtifactReductionEnabled = true;      /**< 导入: 运动伪影削减开关 */
     bool m_importFirFilterEnabled = false;                   /**< 导入: FIR 滤波开关 */
+    ScientificFilterConfig m_importScientificFilterConfig;    /**< 导入: 科学滤波器配置 */
     bool m_realtimeBandpassEnabled = true;                   /**< 实时: 带通滤波开关 */
     bool m_realtimeNotchEnabled = true;                      /**< 实时: 陷波滤波开关 */
     int m_realtimeNotchFrequencyMode = NotchFrequencyFixed;  /**< 实时: 陷波中心频率模式 */
@@ -434,6 +640,7 @@ private:
     bool m_realtimeTransientNoiseSuppressionEnabled = true;  /**< 实时: 瞬态噪声抑制开关 */
     bool m_realtimeMotionArtifactReductionEnabled = true;    /**< 实时: 运动伪影削减开关 */
     bool m_realtimeFirFilterEnabled = false;                 /**< 实时: FIR 滤波开关 */
+    ScientificFilterConfig m_realtimeScientificFilterConfig;  /**< 实时: 科学滤波器配置 */
     double m_realtimeGain = 1.0;                             /**< 实时: 增益系数 */
 
 signals:
@@ -458,6 +665,8 @@ signals:
     void importMotionArtifactReductionEnabledChanged();
     /** @brief 导入 FIR 滤波开关变化信号 */
     void importFirFilterEnabledChanged();
+    /** @brief 导入科学滤波器配置变化信号 */
+    void importScientificFilterChanged();
     /** @brief 实时处理设置变化信号 */
     void realtimeProcessingSettingsChanged();
     /** @brief 实时带通滤波开关变化信号 */
@@ -479,6 +688,8 @@ signals:
     void realtimeMotionArtifactReductionEnabledChanged();
     /** @brief 实时 FIR 滤波开关变化信号 */
     void realtimeFirFilterEnabledChanged();
+    /** @brief 实时科学滤波器配置变化信号 */
+    void realtimeScientificFilterChanged();
     /** @brief 实时增益变化信号 */
     void realtimeGainChanged();
 };

@@ -1,9 +1,10 @@
-﻿/**
+/**
  * @file UpdateDialog.qml
- * @brief 更新对话框。展示新版本信息、发布说明并提供下载与安装控制。
+ * @brief ���¶Ի���չʾ�°汾��Ϣ������˵�����ṩ�����밲װ���ơ�
  */
 import QtQuick
 import QtQuick.Controls
+import MangoComponent
 import BSSAS
 
 Popup {
@@ -19,13 +20,13 @@ Popup {
         : (Popup.CloseOnEscape | Popup.CloseOnPressOutside)
 
     /**
-     * @brief 格式化字节数为可读字符串（B / KB / MB / GB）。
-     * @param bytes 字节数
-     * @returns 格式化后的字符串
+     * @brief ��ʽ���ֽ���Ϊ�ɶ��ַ�����B / KB / MB / GB����
+     * @param bytes �ֽ���
+     * @returns ��ʽ������ַ���
      */
     function formatBytes(bytes) {
         if (bytes <= 0) {
-            return "未知"
+            return "δ֪"
         }
 
         const units = ["B", "KB", "MB", "GB"]
@@ -39,8 +40,8 @@ Popup {
     }
 
     /**
-     * @brief 生成安装包下载进度标签文本。
-     * @returns 进度描述字符串
+     * @brief ���ɰ�װ�����ؽ��ȱ�ǩ�ı���
+     * @returns ���������ַ���
      */
     function progressLabel() {
         if (updateManager.totalBytes > 0) {
@@ -50,14 +51,17 @@ Popup {
         }
 
         if (updateManager.downloadedBytes > 0) {
-            return "已下载 " + formatBytes(updateManager.downloadedBytes)
+            return "������ " + formatBytes(updateManager.downloadedBytes)
         }
 
-        return "准备中..."
+        return "׼����..."
     }
 
-    Overlay.modal: Rectangle {
-        color: Theme.overlayDim
+    Overlay.modal: BlurGlass {
+        blurSource: ApplicationWindow.window ? ApplicationWindow.window.contentItem : null
+        blurAmount: 64
+        borderRadius: 25
+        overlayOpacity: 0.3
     }
 
     background: Rectangle {
@@ -130,7 +134,7 @@ Popup {
                 Text {
                     id: badgeText
                     anchors.centerIn: parent
-                    text: updateManager.mandatoryUpdate ? "强制更新" : "版本更新"
+                    text: updateManager.mandatoryUpdate ? "ǿ�Ƹ���" : "�汾����"
                     color: updateManager.mandatoryUpdate ? Theme.danger : Theme.primary
                     font.pixelSize: 13
                     font.bold: true
@@ -142,8 +146,8 @@ Popup {
             Text {
                 width: parent.width
                 text: updateManager.latestVersion.length > 0
-                    ? ("发现新版本 " + updateManager.latestVersion)
-                    : "发现可用更新"
+                    ? ("�����°汾 " + updateManager.latestVersion)
+                    : "���ֿ��ø���"
                 color: Theme.textPrimary
                 font.pixelSize: 28
                 font.bold: true
@@ -152,10 +156,10 @@ Popup {
 
             Text {
                 width: parent.width
-                text: "当前版本 " + updateManager.currentVersion +
+                text: "��ǰ�汾 " + updateManager.currentVersion +
                     (updateManager.mandatoryUpdate
-                        ? "，该版本已停止支持，请尽快升级。"
-                        : "，建议升级以获取最新功能和修复。")
+                        ? "���ð汾��ֹ֧ͣ�֣��뾡��������"
+                        : "�����������Ի�ȡ���¹��ܺ��޸���")
                 color: Theme.textMuted
                 font.pixelSize: 15
                 lineHeight: 22
@@ -176,7 +180,7 @@ Popup {
                     spacing: 10
 
                     Text {
-                        text: "更新信息"
+                        text: "������Ϣ"
                         color: Theme.textPrimary
                         font.pixelSize: 16
                         font.bold: true
@@ -184,9 +188,9 @@ Popup {
 
                     Text {
                         width: parent.width
-                        text: "发布时间: " + (updateManager.publishTimeDisplay.length > 0
+                        text: "����ʱ��: " + (updateManager.publishTimeDisplay.length > 0
                             ? updateManager.publishTimeDisplay
-                            : "未提供")
+                            : "δ�ṩ")
                         color: Theme.textMuted
                         font.pixelSize: 14
                         wrapMode: Text.WordWrap
@@ -194,7 +198,7 @@ Popup {
 
                     Text {
                         width: parent.width
-                        text: "安装包大小: " + formatBytes(updateManager.fileSize)
+                        text: "��װ����С: " + formatBytes(updateManager.fileSize)
                         color: Theme.textMuted
                         font.pixelSize: 14
                         wrapMode: Text.WordWrap
@@ -202,7 +206,7 @@ Popup {
 
                     Text {
                         width: parent.width
-                        text: "下载地址: " + updateManager.installerUrl
+                        text: "���ص�ַ: " + updateManager.installerUrl
                         color: Theme.textMuted
                         font.pixelSize: 14
                         wrapMode: Text.WrapAnywhere
@@ -215,7 +219,7 @@ Popup {
                 spacing: 10
 
                 Text {
-                    text: "更新说明"
+                    text: "����˵��"
                     color: Theme.textPrimary
                     font.pixelSize: 16
                     font.bold: true
@@ -237,7 +241,7 @@ Popup {
                         width: root.width - 88
                         text: updateManager.releaseNotes.length > 0
                             ? updateManager.releaseNotes
-                            : "暂无更新说明"
+                            : "���޸���˵��"
                         color: Theme.textMuted
                         font.pixelSize: 14
                         wrapMode: Text.WordWrap
@@ -288,8 +292,8 @@ Popup {
                     height: 48
                     enabled: !updateManager.checking && !updateManager.downloading
                     text: updateManager.downloading
-                        ? "下载中..."
-                        : (updateManager.checking ? "检查中..." : "立即更新")
+                        ? "������..."
+                        : (updateManager.checking ? "�����..." : "��������")
                     onClicked: updateManager.startUpdate()
 
                     contentItem: Text {
@@ -311,7 +315,7 @@ Popup {
                     visible: !updateManager.mandatoryUpdate && !updateManager.downloading
                     width: 132
                     height: 48
-                    text: "稍后再说"
+                    text: "�Ժ���˵"
                     onClicked: root.close()
 
                     contentItem: Text {

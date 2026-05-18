@@ -15,7 +15,7 @@ Item {
     property bool dragable: false
 
     property real blurMax: 64
-    property real borderRadius: 24
+    property real borderRadius: 25
     property color borderColor: "transparent"
     property real borderWidth: 0
     property color overlayColor: Theme.cardBg
@@ -26,8 +26,8 @@ Item {
         ? root.mapToItem(root.blurSource, 0, 0)
         : Qt.point(0, 0)
 
-    width: 300
-    height: 200
+    implicitWidth: 300
+    implicitHeight: 200
 
     /** 拖拽功能 */
     MouseArea {

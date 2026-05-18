@@ -19,7 +19,9 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <complex>
 #include <functional>
+#include <limits>
 
 namespace {
 constexpr double kLowCutoffHz = 20.0;
@@ -44,6 +46,16 @@ constexpr int kMinimumFirBandpassOrder = 128;
 constexpr int kMaximumFirBandpassOrder = 8192;
 constexpr double kFirBandpassImpulseSeconds = 0.12;
 constexpr double kFirBandpassTailEnergyRatio = 1e-5;
+constexpr int kMinimumScientificFilterOrder = 1;
+constexpr int kMaximumScientificFilterOrder = 12;
+constexpr double kMinimumScientificFilterFrequencyHz = 20.0;
+constexpr double kPreviewMinimumScientificFilterFrequencyHz = 0.0;
+constexpr double kMaximumScientificFilterFrequencyHz = 5000.0;
+constexpr double kMinimumScientificFilterGapHz = 1.0;
+constexpr double kMinimumScientificFilterBandwidthHz = 1.0;
+constexpr double kMinimumScientificFilterRippleDb = 0.01;
+constexpr double kMinimumScientificFilterAttenuationDb = 1.0;
+constexpr int kScientificFilterResponsePointCount = 512;
 constexpr int kPowerlineNotchCount = 3;
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kAdaptiveNotchWindowSeconds = 1.0;
@@ -100,6 +112,17 @@ struct FirBandpassDesign
     }
 };
 
+struct ScientificFilterDesign
+{
+    kfr::iir_params<double> params;
+    QString errorMessage;
+
+    bool hasSections() const
+    {
+        return params.size() > 0 && errorMessage.isEmpty();
+    }
+};
+
 int resolveSampleRate(int samplingRate)
 {
     if (samplingRate > 0) {
@@ -147,6 +170,367 @@ bool adaptiveNoiseReductionParametersEqual(
         left.highPassFilterEnabled == right.highPassFilterEnabled &&
         left.automaticGainControlEnabled == right.automaticGainControlEnabled &&
         left.transientSuppressionEnabled == right.transientSuppressionEnabled;
+}
+
+double finiteOrDefault(double value, double defaultValue)
+{
+    return std::isfinite(value) ? value : defaultValue;
+}
+
+int normalizeScientificFilterPrototype(int prototype)
+{
+    return std::clamp(
+        prototype,
+        static_cast<int>(ScientificFilterBessel),
+        static_cast<int>(ScientificFilterElliptic));
+}
+
+int normalizeScientificFilterType(int filterType)
+{
+    return std::clamp(
+        filterType,
+        static_cast<int>(ScientificFilterLowPass),
+        static_cast<int>(ScientificFilterBandStop));
+}
+
+int normalizeScientificFilterOrder(int order)
+{
+    return std::clamp(
+        order,
+        kMinimumScientificFilterOrder,
+        kMaximumScientificFilterOrder);
+}
+
+double normalizeScientificFilterFrequency(double frequencyHz, double defaultFrequencyHz)
+{
+    return std::clamp(
+        finiteOrDefault(frequencyHz, defaultFrequencyHz),
+        kMinimumScientificFilterFrequencyHz,
+        kMaximumScientificFilterFrequencyHz);
+}
+
+double normalizeScientificFilterPositiveValue(double value, double defaultValue, double minimumValue)
+{
+    return std::max(minimumValue, finiteOrDefault(value, defaultValue));
+}
+
+ScientificFilterConfig normalizeScientificFilterConfig(ScientificFilterConfig config)
+{
+    ScientificFilterConfig defaults;
+    config.prototype = normalizeScientificFilterPrototype(config.prototype);
+    config.filterType = normalizeScientificFilterType(config.filterType);
+    config.order = normalizeScientificFilterOrder(config.order);
+    config.cutoffFrequencyHz =
+        normalizeScientificFilterFrequency(config.cutoffFrequencyHz, defaults.cutoffFrequencyHz);
+    config.lowCutoffFrequencyHz =
+        normalizeScientificFilterFrequency(config.lowCutoffFrequencyHz, defaults.lowCutoffFrequencyHz);
+    config.highCutoffFrequencyHz =
+        normalizeScientificFilterFrequency(config.highCutoffFrequencyHz, defaults.highCutoffFrequencyHz);
+    config.transitionBandwidthHz =
+        normalizeScientificFilterPositiveValue(
+            config.transitionBandwidthHz,
+            defaults.transitionBandwidthHz,
+            kMinimumScientificFilterBandwidthHz);
+    config.stopbandAttenuationDb =
+        normalizeScientificFilterPositiveValue(
+            config.stopbandAttenuationDb,
+            defaults.stopbandAttenuationDb,
+            kMinimumScientificFilterAttenuationDb);
+    config.passbandRippleDb =
+        normalizeScientificFilterPositiveValue(
+            config.passbandRippleDb,
+            defaults.passbandRippleDb,
+            kMinimumScientificFilterRippleDb);
+    return config;
+}
+
+bool nearlyEqual(double left, double right)
+{
+    return std::abs(left - right) <= 0.0001;
+}
+
+bool scientificFilterConfigsEqual(
+    const ScientificFilterConfig& left,
+    const ScientificFilterConfig& right)
+{
+    return left.enabled == right.enabled &&
+        left.prototype == right.prototype &&
+        left.filterType == right.filterType &&
+        left.order == right.order &&
+        nearlyEqual(left.cutoffFrequencyHz, right.cutoffFrequencyHz) &&
+        nearlyEqual(left.lowCutoffFrequencyHz, right.lowCutoffFrequencyHz) &&
+        nearlyEqual(left.highCutoffFrequencyHz, right.highCutoffFrequencyHz) &&
+        nearlyEqual(left.transitionBandwidthHz, right.transitionBandwidthHz) &&
+        nearlyEqual(left.stopbandAttenuationDb, right.stopbandAttenuationDb) &&
+        nearlyEqual(left.passbandRippleDb, right.passbandRippleDb);
+}
+
+ScientificFilterConfig scientificFilterConfigFromVariantMap(const QVariantMap& map)
+{
+    ScientificFilterConfig config;
+    config.enabled = map.value(QStringLiteral("enabled"), config.enabled).toBool();
+    config.prototype = map.value(QStringLiteral("prototype"), config.prototype).toInt();
+    config.filterType = map.value(QStringLiteral("filterType"), config.filterType).toInt();
+    config.order = map.value(QStringLiteral("order"), config.order).toInt();
+    config.cutoffFrequencyHz =
+        map.value(QStringLiteral("cutoffFrequencyHz"), config.cutoffFrequencyHz).toDouble();
+    config.lowCutoffFrequencyHz =
+        map.value(QStringLiteral("lowCutoffFrequencyHz"), config.lowCutoffFrequencyHz).toDouble();
+    config.highCutoffFrequencyHz =
+        map.value(QStringLiteral("highCutoffFrequencyHz"), config.highCutoffFrequencyHz).toDouble();
+    config.transitionBandwidthHz =
+        map.value(QStringLiteral("transitionBandwidthHz"), config.transitionBandwidthHz).toDouble();
+    config.stopbandAttenuationDb =
+        map.value(QStringLiteral("stopbandAttenuationDb"), config.stopbandAttenuationDb).toDouble();
+    config.passbandRippleDb =
+        map.value(QStringLiteral("passbandRippleDb"), config.passbandRippleDb).toDouble();
+    return normalizeScientificFilterConfig(config);
+}
+
+double scientificFilterMaximumFrequencyHz(int sampleRate)
+{
+    const double nyquistHz = static_cast<double>(resolveSampleRate(sampleRate)) / 2.0;
+    return std::min(kMaximumScientificFilterFrequencyHz, nyquistHz - kMinimumScientificFilterGapHz);
+}
+
+QString scientificFilterPrototypeLabel(int prototype)
+{
+    switch (normalizeScientificFilterPrototype(prototype)) {
+    case ScientificFilterBessel:
+        return QStringLiteral("贝塞尔");
+    case ScientificFilterButterworth:
+        return QStringLiteral("巴特沃斯");
+    case ScientificFilterChebyshevI:
+        return QStringLiteral("切比雪夫 I 型");
+    case ScientificFilterElliptic:
+        return QStringLiteral("椭圆");
+    default:
+        return QStringLiteral("未知");
+    }
+}
+
+QString scientificFilterTypeLabel(int filterType)
+{
+    switch (normalizeScientificFilterType(filterType)) {
+    case ScientificFilterLowPass:
+        return QStringLiteral("低通");
+    case ScientificFilterHighPass:
+        return QStringLiteral("高通");
+    case ScientificFilterBandPass:
+        return QStringLiteral("带通");
+    case ScientificFilterBandStop:
+        return QStringLiteral("带阻");
+    default:
+        return QStringLiteral("未知");
+    }
+}
+
+kfr::zpk makeScientificFilterPrototype(const ScientificFilterConfig& config)
+{
+    switch (normalizeScientificFilterPrototype(config.prototype)) {
+    case ScientificFilterBessel:
+        return kfr::bessel(config.order);
+    case ScientificFilterButterworth:
+        return kfr::butterworth(config.order);
+    case ScientificFilterChebyshevI:
+        return kfr::chebyshev1(config.order, config.passbandRippleDb);
+    case ScientificFilterElliptic:
+        return kfr::elliptic(config.order, config.passbandRippleDb, config.stopbandAttenuationDb);
+    default:
+        return kfr::butterworth(config.order);
+    }
+}
+
+void setScientificFilterParams(
+    ScientificFilterDesign& design,
+    kfr::iir_params<double>&& params)
+{
+    design.params.clear();
+    design.params.insert(design.params.end(), params.cbegin(), params.cend());
+}
+
+ScientificFilterDesign makeScientificFilterDesign(
+    int sampleRate,
+    ScientificFilterConfig config,
+    bool requireEnabled)
+{
+    ScientificFilterDesign design;
+    config = normalizeScientificFilterConfig(config);
+    if (requireEnabled && !config.enabled) {
+        return design;
+    }
+
+    const double sampleRateHz = static_cast<double>(resolveSampleRate(sampleRate));
+    const double maximumFrequencyHz = scientificFilterMaximumFrequencyHz(sampleRate);
+    if (maximumFrequencyHz < kMinimumScientificFilterFrequencyHz + kMinimumScientificFilterGapHz) {
+        design.errorMessage = QStringLiteral("采样率过低，无法设计科学滤波器");
+        return design;
+    }
+
+    const bool usesSingleCutoff =
+        config.filterType == ScientificFilterLowPass ||
+        config.filterType == ScientificFilterHighPass;
+    if (usesSingleCutoff &&
+        (config.cutoffFrequencyHz < kMinimumScientificFilterFrequencyHz ||
+         config.cutoffFrequencyHz > maximumFrequencyHz)) {
+        design.errorMessage =
+            QStringLiteral("截止频率需位于 %1-%2 Hz")
+                .arg(kMinimumScientificFilterFrequencyHz, 0, 'f', 0)
+                .arg(maximumFrequencyHz, 0, 'f', 0);
+        return design;
+    }
+
+    if (!usesSingleCutoff &&
+        (config.lowCutoffFrequencyHz < kMinimumScientificFilterFrequencyHz ||
+         config.highCutoffFrequencyHz > maximumFrequencyHz ||
+         config.highCutoffFrequencyHz - config.lowCutoffFrequencyHz <
+             kMinimumScientificFilterGapHz)) {
+        design.errorMessage =
+            QStringLiteral("低端/高端频率需位于 %1-%2 Hz，且高端大于低端")
+                .arg(kMinimumScientificFilterFrequencyHz, 0, 'f', 0)
+                .arg(maximumFrequencyHz, 0, 'f', 0);
+        return design;
+    }
+
+    const kfr::zpk prototype = makeScientificFilterPrototype(config);
+    switch (config.filterType) {
+    case ScientificFilterLowPass:
+        setScientificFilterParams(
+            design,
+            kfr::to_sos<double>(
+                kfr::iir_lowpass(prototype, config.cutoffFrequencyHz, sampleRateHz)));
+        break;
+    case ScientificFilterHighPass:
+        setScientificFilterParams(
+            design,
+            kfr::to_sos<double>(
+                kfr::iir_highpass(prototype, config.cutoffFrequencyHz, sampleRateHz)));
+        break;
+    case ScientificFilterBandPass:
+        setScientificFilterParams(
+            design,
+            kfr::to_sos<double>(
+                kfr::iir_bandpass(
+                    prototype,
+                    config.lowCutoffFrequencyHz,
+                    config.highCutoffFrequencyHz,
+                    sampleRateHz)));
+        break;
+    case ScientificFilterBandStop:
+        setScientificFilterParams(
+            design,
+            kfr::to_sos<double>(
+                kfr::iir_bandstop(
+                    prototype,
+                    config.lowCutoffFrequencyHz,
+                    config.highCutoffFrequencyHz,
+                    sampleRateHz)));
+        break;
+    default:
+        break;
+    }
+
+    if (design.params.size() > ScientificFilterSectionCapacity) {
+        design.params.clear();
+        design.errorMessage = QStringLiteral("滤波器阶数过高，SOS 节数量超过容量");
+    }
+    return design;
+}
+
+kfr::iir_params<double, ScientificFilterSectionCapacity> scientificFilterFixedParams(
+    const ScientificFilterDesign& design)
+{
+    return kfr::iir_params<double, ScientificFilterSectionCapacity>(
+        design.params.data(),
+        design.params.size());
+}
+
+std::complex<double> evaluateScientificFilterResponse(
+    const kfr::iir_params<double>& params,
+    double frequencyHz,
+    double sampleRateHz)
+{
+    const double omega = 2.0 * kPi * frequencyHz / sampleRateHz;
+    const std::complex<double> z1 = std::exp(std::complex<double>(0.0, -omega));
+    const std::complex<double> z2 = z1 * z1;
+    std::complex<double> response(1.0, 0.0);
+    for (const kfr::biquad_section<double>& section : params) {
+        const std::complex<double> numerator =
+            section.b0 + section.b1 * z1 + section.b2 * z2;
+        const std::complex<double> denominator =
+            section.a0 + section.a1 * z1 + section.a2 * z2;
+        if (std::abs(denominator) <= std::numeric_limits<double>::epsilon()) {
+            continue;
+        }
+        response *= numerator / denominator;
+    }
+    return response;
+}
+
+QVariantMap pointMap(double x, double y)
+{
+    return QVariantMap{
+        {QStringLiteral("x"), x},
+        {QStringLiteral("y"), y}
+    };
+}
+
+bool isFrequencyInScientificPassband(
+    double frequencyHz,
+    const ScientificFilterConfig& config,
+    double maximumFrequencyHz)
+{
+    const double transitionHz =
+        std::max(kMinimumScientificFilterBandwidthHz, config.transitionBandwidthHz);
+    switch (config.filterType) {
+    case ScientificFilterLowPass:
+        return frequencyHz >= kMinimumScientificFilterFrequencyHz &&
+            frequencyHz <= std::max(
+                kMinimumScientificFilterFrequencyHz,
+                config.cutoffFrequencyHz - transitionHz);
+    case ScientificFilterHighPass:
+        return frequencyHz >= std::min(
+                maximumFrequencyHz,
+                config.cutoffFrequencyHz + transitionHz) &&
+            frequencyHz <= maximumFrequencyHz;
+    case ScientificFilterBandPass:
+        return frequencyHz >= config.lowCutoffFrequencyHz + transitionHz &&
+            frequencyHz <= config.highCutoffFrequencyHz - transitionHz;
+    case ScientificFilterBandStop:
+        return (frequencyHz >= kMinimumScientificFilterFrequencyHz &&
+                frequencyHz <= config.lowCutoffFrequencyHz - transitionHz) ||
+            (frequencyHz >= config.highCutoffFrequencyHz + transitionHz &&
+             frequencyHz <= maximumFrequencyHz);
+    default:
+        return false;
+    }
+}
+
+bool assignBool(bool& target, bool value)
+{
+    if (target == value) {
+        return false;
+    }
+    target = value;
+    return true;
+}
+
+bool assignInt(int& target, int value)
+{
+    if (target == value) {
+        return false;
+    }
+    target = value;
+    return true;
+}
+
+bool assignDouble(double& target, double value)
+{
+    if (nearlyEqual(target, value)) {
+        return false;
+    }
+    target = value;
+    return true;
 }
 
 std::array<double, kPowerlineNotchCount> fixedPowerlineFrequencies()
@@ -397,6 +781,34 @@ QVector<float> applyIirPreFilter(
     return filteredData;
 }
 
+QVector<float> applyScientificIirPreFilter(
+    const QVector<float>& rawData,
+    kfr::iir_state<double, ScientificFilterSectionCapacity>& filterState)
+{
+    if (rawData.isEmpty()) {
+        return {};
+    }
+
+    kfr::univector<double> inputDouble(static_cast<size_t>(rawData.size()));
+    std::transform(
+        rawData.cbegin(),
+        rawData.cend(),
+        inputDouble.begin(),
+        [](float value) { return static_cast<double>(value); });
+
+    kfr::univector<double> outputDouble(static_cast<size_t>(rawData.size()));
+    kfr::process(outputDouble, kfr::iir(inputDouble, std::ref(filterState)));
+
+    QVector<float> filteredData(rawData.size());
+    std::transform(
+        outputDouble.begin(),
+        outputDouble.end(),
+        filteredData.begin(),
+        [](double value) { return static_cast<float>(value); });
+
+    return filteredData;
+}
+
 QVector<float> applyFirPreFilter(
     const QVector<float>& rawData,
     kfr::fir_state<double, double>& filterState)
@@ -449,6 +861,8 @@ void initializePreFilterState(
     const PreFilterDesign& bandpassDesign,
     const FirBandpassDesign& firBandpassDesign,
     bool useFirBandpass,
+    const ScientificFilterDesign& scientificFilterDesign,
+    bool useScientificFilter,
     const PreFilterDesign& notchDesign)
 {
     state.bandpassState = !useFirBandpass && bandpassDesign.hasSections()
@@ -459,6 +873,11 @@ void initializePreFilterState(
               kfr::fir_params<double>{ firBandpassDesign.taps })
         : nullptr;
     state.bandpassFirOrder = useFirBandpass ? firBandpassDesign.order() : 0;
+    state.scientificFilterState = useScientificFilter && scientificFilterDesign.hasSections()
+        ? kfr::iir_state<double, ScientificFilterSectionCapacity>{
+              scientificFilterFixedParams(scientificFilterDesign) }
+        : kfr::iir_state<double, ScientificFilterSectionCapacity>{
+              kfr::iir_params<double, ScientificFilterSectionCapacity>() };
     state.notchState = notchDesign.hasSections()
         ? kfr::iir_state<double, 5>{ notchDesign.params() }
         : kfr::iir_state<double, 5>{ kfr::iir_params<double, 5>() };
@@ -470,6 +889,7 @@ void initializePreFilterState(
     int sampleRate,
     const SignalPreprocessOptions& options,
     bool* hasBandpassFilterState = nullptr,
+    bool* hasScientificFilterState = nullptr,
     bool* hasNotchFilterState = nullptr)
 {
     const PreFilterDesign bandpassDesign =
@@ -478,6 +898,8 @@ void initializePreFilterState(
         makeFirBandpassFilterDesign(
             sampleRate,
             options.bandpassEnabled && options.firFilterEnabled);
+    const ScientificFilterDesign scientificFilterDesign =
+        makeScientificFilterDesign(sampleRate, options.scientificFilter, true);
     const PreFilterDesign notchDesign =
         makeNotchFilterDesign(sampleRate, options.notchEnabled, fixedPowerlineFrequencies());
 
@@ -485,6 +907,9 @@ void initializePreFilterState(
         *hasBandpassFilterState = options.firFilterEnabled
             ? firBandpassDesign.hasTaps()
             : bandpassDesign.hasSections();
+    }
+    if (hasScientificFilterState != nullptr) {
+        *hasScientificFilterState = scientificFilterDesign.hasSections();
     }
     if (hasNotchFilterState != nullptr) {
         *hasNotchFilterState = notchDesign.hasSections();
@@ -495,6 +920,8 @@ void initializePreFilterState(
         bandpassDesign,
         firBandpassDesign,
         options.firFilterEnabled,
+        scientificFilterDesign,
+        options.scientificFilter.enabled,
         notchDesign);
 }
 
@@ -540,6 +967,35 @@ QVector<float> applyBandpassFilterFrame(
 
     kfr::iir_state<double, 5> temporaryState{ bandpassDesign.params() };
     return applyIirPreFilter(rawData, temporaryState);
+}
+
+QVector<float> applyScientificFilterFrame(
+    const QVector<float>& bandpassData,
+    int sampleRate,
+    const SignalPreprocessOptions& options,
+    SignalPreFilterState* filterState,
+    bool hasScientificFilterState)
+{
+    if (bandpassData.isEmpty() || !options.scientificFilter.enabled) {
+        return bandpassData;
+    }
+
+    if (filterState != nullptr && hasScientificFilterState) {
+        return applyScientificIirPreFilter(
+            bandpassData,
+            filterState->scientificFilterState);
+    }
+
+    const ScientificFilterDesign scientificFilterDesign =
+        makeScientificFilterDesign(sampleRate, options.scientificFilter, true);
+    if (!scientificFilterDesign.hasSections()) {
+        return bandpassData;
+    }
+
+    kfr::iir_state<double, ScientificFilterSectionCapacity> temporaryState{
+        scientificFilterFixedParams(scientificFilterDesign)
+    };
+    return applyScientificIirPreFilter(bandpassData, temporaryState);
 }
 
 int adaptiveNotchHistorySampleCount(int sampleRate)
@@ -815,6 +1271,7 @@ QVector<float> applyStreamingPreFilter(
     const SignalPreprocessOptions& options,
     SignalPreFilterState* filterState,
     bool hasBandpassFilterState,
+    bool hasScientificFilterState,
     bool hasNotchFilterState)
 {
     if (rawData.isEmpty()) {
@@ -827,8 +1284,14 @@ QVector<float> applyStreamingPreFilter(
         options,
         filterState,
         hasBandpassFilterState);
-    return applyNotchFilterFrame(
+    const QVector<float> scientificFilterData = applyScientificFilterFrame(
         bandpassData,
+        sampleRate,
+        options,
+        filterState,
+        hasScientificFilterState);
+    return applyNotchFilterFrame(
+        scientificFilterData,
         sampleRate,
         options,
         filterState,
@@ -859,12 +1322,14 @@ QVector<float> applyImportPreFilterPipeline(
 
     SignalPreFilterState importFilterState;
     bool hasBandpassFilterState = false;
+    bool hasScientificFilterState = false;
     bool hasNotchFilterState = false;
     initializePreFilterState(
         importFilterState,
         sampleRate,
         options,
         &hasBandpassFilterState,
+        &hasScientificFilterState,
         &hasNotchFilterState);
     if (options.bandpassEnabled && options.firFilterEnabled && hasBandpassFilterState) {
         timingSummary.insert(
@@ -880,6 +1345,7 @@ QVector<float> applyImportPreFilterPipeline(
             std::round(static_cast<double>(sampleRate) * kAdaptiveNotchFrameSeconds)));
 
     double bandpassMs = 0.0;
+    double scientificFilterMs = 0.0;
     double notchMs = 0.0;
     for (qsizetype startIndex = 0; startIndex < rawData.size(); startIndex += frameSampleCount) {
         const qsizetype currentFrameSampleCount =
@@ -896,6 +1362,18 @@ QVector<float> applyImportPreFilterPipeline(
                 &importFilterState,
                 hasBandpassFilterState);
             bandpassMs += elapsedMilliseconds(bandpassTimer);
+        }
+
+        if (options.scientificFilter.enabled) {
+            QElapsedTimer scientificFilterTimer;
+            scientificFilterTimer.start();
+            frameData = applyScientificFilterFrame(
+                frameData,
+                sampleRate,
+                options,
+                &importFilterState,
+                hasScientificFilterState);
+            scientificFilterMs += elapsedMilliseconds(scientificFilterTimer);
         }
 
         if (options.notchEnabled) {
@@ -915,6 +1393,9 @@ QVector<float> applyImportPreFilterPipeline(
 
     if (options.bandpassEnabled) {
         timingSummary.insert(QStringLiteral("bandpassMs"), bandpassMs);
+    }
+    if (options.scientificFilter.enabled) {
+        timingSummary.insert(QStringLiteral("scientificFilterMs"), scientificFilterMs);
     }
     if (options.notchEnabled) {
         timingSummary.insert(QStringLiteral("notchMs"), notchMs);
@@ -1011,6 +1492,7 @@ QVector<float> runRealtimePreprocessPipeline(
     ActiveNoiseCancellation::StreamingState* ancStreamingState = nullptr,
     SignalPreFilterState* preFilterState = nullptr,
     bool hasBandpassFilterState = false,
+    bool hasScientificFilterState = false,
     bool hasNotchFilterState = false,
     AdaptiveNoiseReduction::StreamingState* adaptiveStreamingState = nullptr)
 {
@@ -1025,6 +1507,7 @@ QVector<float> runRealtimePreprocessPipeline(
         options,
         preFilterState,
         hasBandpassFilterState,
+        hasScientificFilterState,
         hasNotchFilterState);
 
     if (options.activeNoiseCancellationEnabled &&
@@ -1212,6 +1695,66 @@ bool SignalPreprocessing::importFirFilterEnabled() const
     return m_importFirFilterEnabled;
 }
 
+bool SignalPreprocessing::importScientificFilterEnabled() const
+{
+    QMutexLocker locker(&m_importSettingsMutex);
+    return m_importScientificFilterConfig.enabled;
+}
+
+int SignalPreprocessing::importScientificFilterPrototype() const
+{
+    QMutexLocker locker(&m_importSettingsMutex);
+    return m_importScientificFilterConfig.prototype;
+}
+
+int SignalPreprocessing::importScientificFilterType() const
+{
+    QMutexLocker locker(&m_importSettingsMutex);
+    return m_importScientificFilterConfig.filterType;
+}
+
+int SignalPreprocessing::importScientificFilterOrder() const
+{
+    QMutexLocker locker(&m_importSettingsMutex);
+    return m_importScientificFilterConfig.order;
+}
+
+double SignalPreprocessing::importScientificFilterCutoffFrequencyHz() const
+{
+    QMutexLocker locker(&m_importSettingsMutex);
+    return m_importScientificFilterConfig.cutoffFrequencyHz;
+}
+
+double SignalPreprocessing::importScientificFilterLowCutoffFrequencyHz() const
+{
+    QMutexLocker locker(&m_importSettingsMutex);
+    return m_importScientificFilterConfig.lowCutoffFrequencyHz;
+}
+
+double SignalPreprocessing::importScientificFilterHighCutoffFrequencyHz() const
+{
+    QMutexLocker locker(&m_importSettingsMutex);
+    return m_importScientificFilterConfig.highCutoffFrequencyHz;
+}
+
+double SignalPreprocessing::importScientificFilterTransitionBandwidthHz() const
+{
+    QMutexLocker locker(&m_importSettingsMutex);
+    return m_importScientificFilterConfig.transitionBandwidthHz;
+}
+
+double SignalPreprocessing::importScientificFilterStopbandAttenuationDb() const
+{
+    QMutexLocker locker(&m_importSettingsMutex);
+    return m_importScientificFilterConfig.stopbandAttenuationDb;
+}
+
+double SignalPreprocessing::importScientificFilterPassbandRippleDb() const
+{
+    QMutexLocker locker(&m_importSettingsMutex);
+    return m_importScientificFilterConfig.passbandRippleDb;
+}
+
 bool SignalPreprocessing::realtimeAllProcessingEnabled() const
 {
     QMutexLocker locker(&m_realtimeSettingsMutex);
@@ -1300,6 +1843,66 @@ bool SignalPreprocessing::realtimeFirFilterEnabled() const
 {
     QMutexLocker locker(&m_realtimeSettingsMutex);
     return m_realtimeFirFilterEnabled;
+}
+
+bool SignalPreprocessing::realtimeScientificFilterEnabled() const
+{
+    QMutexLocker locker(&m_realtimeSettingsMutex);
+    return m_realtimeScientificFilterConfig.enabled;
+}
+
+int SignalPreprocessing::realtimeScientificFilterPrototype() const
+{
+    QMutexLocker locker(&m_realtimeSettingsMutex);
+    return m_realtimeScientificFilterConfig.prototype;
+}
+
+int SignalPreprocessing::realtimeScientificFilterType() const
+{
+    QMutexLocker locker(&m_realtimeSettingsMutex);
+    return m_realtimeScientificFilterConfig.filterType;
+}
+
+int SignalPreprocessing::realtimeScientificFilterOrder() const
+{
+    QMutexLocker locker(&m_realtimeSettingsMutex);
+    return m_realtimeScientificFilterConfig.order;
+}
+
+double SignalPreprocessing::realtimeScientificFilterCutoffFrequencyHz() const
+{
+    QMutexLocker locker(&m_realtimeSettingsMutex);
+    return m_realtimeScientificFilterConfig.cutoffFrequencyHz;
+}
+
+double SignalPreprocessing::realtimeScientificFilterLowCutoffFrequencyHz() const
+{
+    QMutexLocker locker(&m_realtimeSettingsMutex);
+    return m_realtimeScientificFilterConfig.lowCutoffFrequencyHz;
+}
+
+double SignalPreprocessing::realtimeScientificFilterHighCutoffFrequencyHz() const
+{
+    QMutexLocker locker(&m_realtimeSettingsMutex);
+    return m_realtimeScientificFilterConfig.highCutoffFrequencyHz;
+}
+
+double SignalPreprocessing::realtimeScientificFilterTransitionBandwidthHz() const
+{
+    QMutexLocker locker(&m_realtimeSettingsMutex);
+    return m_realtimeScientificFilterConfig.transitionBandwidthHz;
+}
+
+double SignalPreprocessing::realtimeScientificFilterStopbandAttenuationDb() const
+{
+    QMutexLocker locker(&m_realtimeSettingsMutex);
+    return m_realtimeScientificFilterConfig.stopbandAttenuationDb;
+}
+
+double SignalPreprocessing::realtimeScientificFilterPassbandRippleDb() const
+{
+    QMutexLocker locker(&m_realtimeSettingsMutex);
+    return m_realtimeScientificFilterConfig.passbandRippleDb;
 }
 
 double SignalPreprocessing::realtimeGain() const
@@ -1539,6 +2142,173 @@ void SignalPreprocessing::setImportFirFilterEnabled(bool enabled)
     }
 
     emit importFirFilterEnabledChanged();
+    emit importProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setImportScientificFilterEnabled(bool enabled)
+{
+    bool changed = false;
+    {
+        QMutexLocker locker(&m_importSettingsMutex);
+        changed = assignBool(m_importScientificFilterConfig.enabled, enabled);
+    }
+    if (!changed) {
+        return;
+    }
+    emit importScientificFilterChanged();
+    emit importProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setImportScientificFilterPrototype(int prototype)
+{
+    bool changed = false;
+    {
+        QMutexLocker locker(&m_importSettingsMutex);
+        changed = assignInt(
+            m_importScientificFilterConfig.prototype,
+            normalizeScientificFilterPrototype(prototype));
+    }
+    if (!changed) {
+        return;
+    }
+    emit importScientificFilterChanged();
+    emit importProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setImportScientificFilterType(int filterType)
+{
+    bool changed = false;
+    {
+        QMutexLocker locker(&m_importSettingsMutex);
+        changed = assignInt(
+            m_importScientificFilterConfig.filterType,
+            normalizeScientificFilterType(filterType));
+    }
+    if (!changed) {
+        return;
+    }
+    emit importScientificFilterChanged();
+    emit importProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setImportScientificFilterOrder(int order)
+{
+    bool changed = false;
+    {
+        QMutexLocker locker(&m_importSettingsMutex);
+        changed = assignInt(
+            m_importScientificFilterConfig.order,
+            normalizeScientificFilterOrder(order));
+    }
+    if (!changed) {
+        return;
+    }
+    emit importScientificFilterChanged();
+    emit importProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setImportScientificFilterCutoffFrequencyHz(double frequencyHz)
+{
+    bool changed = false;
+    {
+        QMutexLocker locker(&m_importSettingsMutex);
+        changed = assignDouble(
+            m_importScientificFilterConfig.cutoffFrequencyHz,
+            normalizeScientificFilterFrequency(frequencyHz, ScientificFilterConfig{}.cutoffFrequencyHz));
+    }
+    if (!changed) {
+        return;
+    }
+    emit importScientificFilterChanged();
+    emit importProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setImportScientificFilterLowCutoffFrequencyHz(double frequencyHz)
+{
+    bool changed = false;
+    {
+        QMutexLocker locker(&m_importSettingsMutex);
+        changed = assignDouble(
+            m_importScientificFilterConfig.lowCutoffFrequencyHz,
+            normalizeScientificFilterFrequency(frequencyHz, ScientificFilterConfig{}.lowCutoffFrequencyHz));
+    }
+    if (!changed) {
+        return;
+    }
+    emit importScientificFilterChanged();
+    emit importProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setImportScientificFilterHighCutoffFrequencyHz(double frequencyHz)
+{
+    bool changed = false;
+    {
+        QMutexLocker locker(&m_importSettingsMutex);
+        changed = assignDouble(
+            m_importScientificFilterConfig.highCutoffFrequencyHz,
+            normalizeScientificFilterFrequency(frequencyHz, ScientificFilterConfig{}.highCutoffFrequencyHz));
+    }
+    if (!changed) {
+        return;
+    }
+    emit importScientificFilterChanged();
+    emit importProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setImportScientificFilterTransitionBandwidthHz(double bandwidthHz)
+{
+    bool changed = false;
+    {
+        QMutexLocker locker(&m_importSettingsMutex);
+        changed = assignDouble(
+            m_importScientificFilterConfig.transitionBandwidthHz,
+            normalizeScientificFilterPositiveValue(
+                bandwidthHz,
+                ScientificFilterConfig{}.transitionBandwidthHz,
+                kMinimumScientificFilterBandwidthHz));
+    }
+    if (!changed) {
+        return;
+    }
+    emit importScientificFilterChanged();
+    emit importProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setImportScientificFilterStopbandAttenuationDb(double attenuationDb)
+{
+    bool changed = false;
+    {
+        QMutexLocker locker(&m_importSettingsMutex);
+        changed = assignDouble(
+            m_importScientificFilterConfig.stopbandAttenuationDb,
+            normalizeScientificFilterPositiveValue(
+                attenuationDb,
+                ScientificFilterConfig{}.stopbandAttenuationDb,
+                kMinimumScientificFilterAttenuationDb));
+    }
+    if (!changed) {
+        return;
+    }
+    emit importScientificFilterChanged();
+    emit importProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setImportScientificFilterPassbandRippleDb(double rippleDb)
+{
+    bool changed = false;
+    {
+        QMutexLocker locker(&m_importSettingsMutex);
+        changed = assignDouble(
+            m_importScientificFilterConfig.passbandRippleDb,
+            normalizeScientificFilterPositiveValue(
+                rippleDb,
+                ScientificFilterConfig{}.passbandRippleDb,
+                kMinimumScientificFilterRippleDb));
+    }
+    if (!changed) {
+        return;
+    }
+    emit importScientificFilterChanged();
     emit importProcessingSettingsChanged();
 }
 
@@ -1797,6 +2567,173 @@ void SignalPreprocessing::setRealtimeFirFilterEnabled(bool enabled)
     emit realtimeProcessingSettingsChanged();
 }
 
+void SignalPreprocessing::setRealtimeScientificFilterEnabled(bool enabled)
+{
+    bool changed = false;
+    {
+        QMutexLocker locker(&m_realtimeSettingsMutex);
+        changed = assignBool(m_realtimeScientificFilterConfig.enabled, enabled);
+    }
+    if (!changed) {
+        return;
+    }
+    emit realtimeScientificFilterChanged();
+    emit realtimeProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setRealtimeScientificFilterPrototype(int prototype)
+{
+    bool changed = false;
+    {
+        QMutexLocker locker(&m_realtimeSettingsMutex);
+        changed = assignInt(
+            m_realtimeScientificFilterConfig.prototype,
+            normalizeScientificFilterPrototype(prototype));
+    }
+    if (!changed) {
+        return;
+    }
+    emit realtimeScientificFilterChanged();
+    emit realtimeProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setRealtimeScientificFilterType(int filterType)
+{
+    bool changed = false;
+    {
+        QMutexLocker locker(&m_realtimeSettingsMutex);
+        changed = assignInt(
+            m_realtimeScientificFilterConfig.filterType,
+            normalizeScientificFilterType(filterType));
+    }
+    if (!changed) {
+        return;
+    }
+    emit realtimeScientificFilterChanged();
+    emit realtimeProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setRealtimeScientificFilterOrder(int order)
+{
+    bool changed = false;
+    {
+        QMutexLocker locker(&m_realtimeSettingsMutex);
+        changed = assignInt(
+            m_realtimeScientificFilterConfig.order,
+            normalizeScientificFilterOrder(order));
+    }
+    if (!changed) {
+        return;
+    }
+    emit realtimeScientificFilterChanged();
+    emit realtimeProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setRealtimeScientificFilterCutoffFrequencyHz(double frequencyHz)
+{
+    bool changed = false;
+    {
+        QMutexLocker locker(&m_realtimeSettingsMutex);
+        changed = assignDouble(
+            m_realtimeScientificFilterConfig.cutoffFrequencyHz,
+            normalizeScientificFilterFrequency(frequencyHz, ScientificFilterConfig{}.cutoffFrequencyHz));
+    }
+    if (!changed) {
+        return;
+    }
+    emit realtimeScientificFilterChanged();
+    emit realtimeProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setRealtimeScientificFilterLowCutoffFrequencyHz(double frequencyHz)
+{
+    bool changed = false;
+    {
+        QMutexLocker locker(&m_realtimeSettingsMutex);
+        changed = assignDouble(
+            m_realtimeScientificFilterConfig.lowCutoffFrequencyHz,
+            normalizeScientificFilterFrequency(frequencyHz, ScientificFilterConfig{}.lowCutoffFrequencyHz));
+    }
+    if (!changed) {
+        return;
+    }
+    emit realtimeScientificFilterChanged();
+    emit realtimeProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setRealtimeScientificFilterHighCutoffFrequencyHz(double frequencyHz)
+{
+    bool changed = false;
+    {
+        QMutexLocker locker(&m_realtimeSettingsMutex);
+        changed = assignDouble(
+            m_realtimeScientificFilterConfig.highCutoffFrequencyHz,
+            normalizeScientificFilterFrequency(frequencyHz, ScientificFilterConfig{}.highCutoffFrequencyHz));
+    }
+    if (!changed) {
+        return;
+    }
+    emit realtimeScientificFilterChanged();
+    emit realtimeProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setRealtimeScientificFilterTransitionBandwidthHz(double bandwidthHz)
+{
+    bool changed = false;
+    {
+        QMutexLocker locker(&m_realtimeSettingsMutex);
+        changed = assignDouble(
+            m_realtimeScientificFilterConfig.transitionBandwidthHz,
+            normalizeScientificFilterPositiveValue(
+                bandwidthHz,
+                ScientificFilterConfig{}.transitionBandwidthHz,
+                kMinimumScientificFilterBandwidthHz));
+    }
+    if (!changed) {
+        return;
+    }
+    emit realtimeScientificFilterChanged();
+    emit realtimeProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setRealtimeScientificFilterStopbandAttenuationDb(double attenuationDb)
+{
+    bool changed = false;
+    {
+        QMutexLocker locker(&m_realtimeSettingsMutex);
+        changed = assignDouble(
+            m_realtimeScientificFilterConfig.stopbandAttenuationDb,
+            normalizeScientificFilterPositiveValue(
+                attenuationDb,
+                ScientificFilterConfig{}.stopbandAttenuationDb,
+                kMinimumScientificFilterAttenuationDb));
+    }
+    if (!changed) {
+        return;
+    }
+    emit realtimeScientificFilterChanged();
+    emit realtimeProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setRealtimeScientificFilterPassbandRippleDb(double rippleDb)
+{
+    bool changed = false;
+    {
+        QMutexLocker locker(&m_realtimeSettingsMutex);
+        changed = assignDouble(
+            m_realtimeScientificFilterConfig.passbandRippleDb,
+            normalizeScientificFilterPositiveValue(
+                rippleDb,
+                ScientificFilterConfig{}.passbandRippleDb,
+                kMinimumScientificFilterRippleDb));
+    }
+    if (!changed) {
+        return;
+    }
+    emit realtimeScientificFilterChanged();
+    emit realtimeProcessingSettingsChanged();
+}
+
 void SignalPreprocessing::setRealtimeGain(double gain)
 {
     const double normalizedGain = normalizeRealtimeGain(gain);
@@ -1809,6 +2746,120 @@ void SignalPreprocessing::setRealtimeGain(double gain)
     }
 
     emit realtimeGainChanged();
+}
+
+QVariantMap SignalPreprocessing::scientificFilterResponse(
+    const QVariantMap& config,
+    int sampleRate) const
+{
+    const int effectiveSampleRate = resolveSampleRate(sampleRate);
+    ScientificFilterConfig scientificConfig =
+        scientificFilterConfigFromVariantMap(config);
+    const ScientificFilterDesign design =
+        makeScientificFilterDesign(effectiveSampleRate, scientificConfig, false);
+
+    QVariantMap response;
+    response.insert(QStringLiteral("frequencyResponse"), QVariantList{});
+    response.insert(QStringLiteral("phase"), QVariantList{});
+    response.insert(QStringLiteral("groupDelay"), QVariantList{});
+    response.insert(QStringLiteral("actualRippleDb"), 0.0);
+    response.insert(QStringLiteral("minimumFrequencyHz"), kPreviewMinimumScientificFilterFrequencyHz);
+    response.insert(
+        QStringLiteral("maximumFrequencyHz"),
+        scientificFilterMaximumFrequencyHz(effectiveSampleRate));
+    response.insert(QStringLiteral("error"), design.errorMessage);
+    if (!design.errorMessage.isEmpty()) {
+        return response;
+    }
+    if (!design.hasSections()) {
+        response.insert(QStringLiteral("error"), QStringLiteral("无法生成滤波器响应"));
+        return response;
+    }
+
+    const double sampleRateHz = static_cast<double>(effectiveSampleRate);
+    const double maximumFrequencyHz = scientificFilterMaximumFrequencyHz(effectiveSampleRate);
+    const int pointCount = std::max(2, kScientificFilterResponsePointCount);
+    QVector<double> frequencies;
+    QVector<double> magnitudeDbValues;
+    QVector<double> phaseRadians;
+    frequencies.reserve(pointCount);
+    magnitudeDbValues.reserve(pointCount);
+    phaseRadians.reserve(pointCount);
+
+    QVariantList frequencyResponsePoints;
+    frequencyResponsePoints.reserve(pointCount);
+    QVariantList phasePoints;
+    phasePoints.reserve(pointCount);
+    QVariantList groupDelayPoints;
+    groupDelayPoints.reserve(pointCount);
+
+    double previousPhase = 0.0;
+    bool hasPreviousPhase = false;
+    double passbandMinimumDb = std::numeric_limits<double>::infinity();
+    double passbandMaximumDb = -std::numeric_limits<double>::infinity();
+
+    for (int index = 0; index < pointCount; ++index) {
+        const double ratio = pointCount <= 1
+            ? 0.0
+            : static_cast<double>(index) / static_cast<double>(pointCount - 1);
+        const double frequencyHz = kPreviewMinimumScientificFilterFrequencyHz +
+            (maximumFrequencyHz - kPreviewMinimumScientificFilterFrequencyHz) * ratio;
+        const std::complex<double> complexResponse =
+            evaluateScientificFilterResponse(design.params, frequencyHz, sampleRateHz);
+        const double magnitudeDb =
+            20.0 * std::log10(std::max(std::abs(complexResponse), kMinimumRmsForDb));
+        double phase = std::atan2(complexResponse.imag(), complexResponse.real());
+        if (hasPreviousPhase) {
+            while (phase - previousPhase > kPi) {
+                phase -= 2.0 * kPi;
+            }
+            while (phase - previousPhase < -kPi) {
+                phase += 2.0 * kPi;
+            }
+        }
+        previousPhase = phase;
+        hasPreviousPhase = true;
+
+        frequencies.append(frequencyHz);
+        magnitudeDbValues.append(magnitudeDb);
+        phaseRadians.append(phase);
+        frequencyResponsePoints.append(pointMap(frequencyHz, magnitudeDb));
+        phasePoints.append(pointMap(frequencyHz, phase * 180.0 / kPi));
+
+        if (isFrequencyInScientificPassband(
+                frequencyHz,
+                scientificConfig,
+                maximumFrequencyHz)) {
+            passbandMinimumDb = std::min(passbandMinimumDb, magnitudeDb);
+            passbandMaximumDb = std::max(passbandMaximumDb, magnitudeDb);
+        }
+    }
+
+    for (int index = 0; index < pointCount; ++index) {
+        const int leftIndex = std::max(0, index - 1);
+        const int rightIndex = std::min(pointCount - 1, index + 1);
+        const double deltaFrequencyHz = frequencies[rightIndex] - frequencies[leftIndex];
+        const double deltaOmega =
+            2.0 * kPi * deltaFrequencyHz / sampleRateHz;
+        const double groupDelaySamples = deltaOmega > 0.0
+            ? -(phaseRadians[rightIndex] - phaseRadians[leftIndex]) / deltaOmega
+            : 0.0;
+        const double groupDelayMilliseconds =
+            groupDelaySamples / sampleRateHz * 1000.0;
+        groupDelayPoints.append(
+            pointMap(frequencies[index], groupDelayMilliseconds));
+    }
+
+    const double actualRippleDb =
+        std::isfinite(passbandMinimumDb) && std::isfinite(passbandMaximumDb)
+        ? std::max(0.0, passbandMaximumDb - passbandMinimumDb)
+        : 0.0;
+    response.insert(QStringLiteral("frequencyResponse"), frequencyResponsePoints);
+    response.insert(QStringLiteral("phase"), phasePoints);
+    response.insert(QStringLiteral("groupDelay"), groupDelayPoints);
+    response.insert(QStringLiteral("actualRippleDb"), actualRippleDb);
+    response.insert(QStringLiteral("error"), QString());
+    return response;
 }
 
 /** @brief 启动实时预处理定时器，开始周期性从DAQ设备读取数据并处理。 */
@@ -1899,7 +2950,9 @@ QVector<float> SignalPreprocessing::filterDataImport(
     timingSummary.insert(QStringLiteral("motionArtifactReductionMs"), -1.0);
     timingSummary.insert(QStringLiteral("downsamplingMs"), -1.0);
 
-    if (importOptions.bandpassEnabled || importOptions.notchEnabled) {
+    if (importOptions.bandpassEnabled ||
+        importOptions.scientificFilter.enabled ||
+        importOptions.notchEnabled) {
         preprocessedData = applyImportPreFilterPipeline(
             preprocessedData,
             effectiveSampleRate,
@@ -1983,13 +3036,27 @@ QVector<float> SignalPreprocessing::filterDataImport(
               importOptions.firFilterEnabled
                   ? QStringLiteral("FIR")
                   : QStringLiteral("IIR")},
-             {QStringLiteral("bandpassFilterType"),
-              importOptions.firFilterEnabled
-                  ? QStringLiteral("FIR")
-                  : QStringLiteral("IIR")},
-             {QStringLiteral("bandpassFirOrder"), bandpassFirOrder},
-             {QStringLiteral("adaptiveNoiseReductionEnabled"),
-              importOptions.adaptiveNoiseReductionEnabled},
+              {QStringLiteral("bandpassFilterType"),
+               importOptions.firFilterEnabled
+                   ? QStringLiteral("FIR")
+                   : QStringLiteral("IIR")},
+              {QStringLiteral("bandpassFirOrder"), bandpassFirOrder},
+              {QStringLiteral("scientificFilterEnabled"),
+               importOptions.scientificFilter.enabled},
+              {QStringLiteral("scientificFilterPrototype"),
+               scientificFilterPrototypeLabel(importOptions.scientificFilter.prototype)},
+              {QStringLiteral("scientificFilterType"),
+               scientificFilterTypeLabel(importOptions.scientificFilter.filterType)},
+              {QStringLiteral("scientificFilterOrder"),
+               importOptions.scientificFilter.order},
+              {QStringLiteral("scientificFilterCutoffFrequencyHz"),
+               importOptions.scientificFilter.cutoffFrequencyHz},
+              {QStringLiteral("scientificFilterLowCutoffFrequencyHz"),
+               importOptions.scientificFilter.lowCutoffFrequencyHz},
+              {QStringLiteral("scientificFilterHighCutoffFrequencyHz"),
+               importOptions.scientificFilter.highCutoffFrequencyHz},
+              {QStringLiteral("adaptiveNoiseReductionEnabled"),
+               importOptions.adaptiveNoiseReductionEnabled},
              {QStringLiteral("waveletDenoisingEnabled"), importOptions.waveletEnabled},
              {QStringLiteral("transientNoiseSuppressionEnabled"),
               importOptions.transientNoiseSuppressionEnabled},
@@ -2014,6 +3081,8 @@ SignalPreprocessOptions SignalPreprocessing::importPreprocessOptions() const
         options.notchEnabled = m_importNotchEnabled;
         options.notchFrequencyMode = m_importNotchFrequencyMode;
         options.firFilterEnabled = m_importFirFilterEnabled;
+        options.scientificFilter =
+            normalizeScientificFilterConfig(m_importScientificFilterConfig);
         options.adaptiveNoiseReductionEnabled = m_importAdaptiveNoiseReductionEnabled;
         options.adaptiveNoiseReductionParameters =
             normalizeAdaptiveNoiseReductionParameters(
@@ -2035,6 +3104,8 @@ SignalPreprocessOptions SignalPreprocessing::realtimePreprocessOptions() const
         options.notchEnabled = m_realtimeNotchEnabled;
         options.notchFrequencyMode = m_realtimeNotchFrequencyMode;
         options.firFilterEnabled = m_realtimeFirFilterEnabled;
+        options.scientificFilter =
+            normalizeScientificFilterConfig(m_realtimeScientificFilterConfig);
         options.activeNoiseCancellationEnabled = m_realtimeActiveNoiseCancellationEnabled;
         options.adaptiveNoiseReductionEnabled = m_realtimeAdaptiveNoiseReductionEnabled;
         options.adaptiveNoiseReductionParameters =
@@ -2066,6 +3137,8 @@ void PreprocessingWorker::initPreFilter(
     m_preFilterSampleRate = resolveSampleRate(sampleRate);
     m_preFilterBandpassEnabled = options.bandpassEnabled;
     m_preFilterBandpassFirFilterEnabled = options.firFilterEnabled;
+    m_preFilterScientificFilterConfig =
+        normalizeScientificFilterConfig(options.scientificFilter);
     m_preFilterNotchEnabled = options.notchEnabled;
     m_preFilterNotchFrequencyMode =
         normalizeNotchFrequencyMode(options.notchFrequencyMode);
@@ -2076,6 +3149,11 @@ void PreprocessingWorker::initPreFilter(
         makeFirBandpassFilterDesign(
             m_preFilterSampleRate,
             options.bandpassEnabled && options.firFilterEnabled);
+    const ScientificFilterDesign scientificFilterDesign =
+        makeScientificFilterDesign(
+            m_preFilterSampleRate,
+            options.scientificFilter,
+            true);
     const PreFilterDesign notchDesign =
         makeNotchFilterDesign(
             m_preFilterSampleRate,
@@ -2085,6 +3163,7 @@ void PreprocessingWorker::initPreFilter(
     const bool hasBandpassFilterState = options.firFilterEnabled
         ? firBandpassDesign.hasTaps()
         : bandpassDesign.hasSections();
+    const bool hasScientificFilterState = scientificFilterDesign.hasSections();
     const bool hasNotchFilterState = notchDesign.hasSections();
     for (SignalPreFilterState& channelState : m_preFilterStates) {
         initializePreFilterState(
@@ -2092,9 +3171,12 @@ void PreprocessingWorker::initPreFilter(
             bandpassDesign,
             firBandpassDesign,
             options.firFilterEnabled,
+            scientificFilterDesign,
+            options.scientificFilter.enabled,
             notchDesign);
     }
     m_hasBandpassFilterState = hasBandpassFilterState;
+    m_hasScientificFilterState = hasScientificFilterState;
     m_hasNotchFilterState = hasNotchFilterState;
 }
 
@@ -2148,6 +3230,9 @@ void PreprocessingWorker::processing()
         m_preFilterSampleRate != configuredSampleRate ||
         m_preFilterBandpassEnabled != realtimeOptions.bandpassEnabled ||
         m_preFilterBandpassFirFilterEnabled != realtimeOptions.firFilterEnabled ||
+        !scientificFilterConfigsEqual(
+            m_preFilterScientificFilterConfig,
+            normalizeScientificFilterConfig(realtimeOptions.scientificFilter)) ||
         m_preFilterNotchEnabled != realtimeOptions.notchEnabled ||
         m_preFilterNotchFrequencyMode !=
             normalizeNotchFrequencyMode(realtimeOptions.notchFrequencyMode);
@@ -2173,6 +3258,7 @@ void PreprocessingWorker::processing()
         realtimeOptions,
         &m_preFilterStates[static_cast<size_t>(kRealtimeReferenceNoiseChannel)],
         m_hasBandpassFilterState,
+        m_hasScientificFilterState,
         m_hasNotchFilterState);
     DataManager::instance()->splicRealtimeChannelTimeDomainData(
         kRealtimeReferenceNoiseChannel,
@@ -2200,6 +3286,7 @@ void PreprocessingWorker::processing()
                 &m_realtimeAncStates[static_cast<size_t>(channel)],
                 &m_preFilterStates[static_cast<size_t>(channel)],
                 m_hasBandpassFilterState,
+                m_hasScientificFilterState,
                 m_hasNotchFilterState,
                 &m_realtimeAdaptiveStates[static_cast<size_t>(channel)]);
             selectedPreprocessedData = preprocessedData;
@@ -2214,6 +3301,7 @@ void PreprocessingWorker::processing()
                 &m_realtimeAncStates[static_cast<size_t>(channel)],
                 &m_preFilterStates[static_cast<size_t>(channel)],
                 m_hasBandpassFilterState,
+                m_hasScientificFilterState,
                 m_hasNotchFilterState,
                 &m_realtimeAdaptiveStates[static_cast<size_t>(channel)]);
         }

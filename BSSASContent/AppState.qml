@@ -60,10 +60,30 @@ QtObject {
         property bool importAdaptiveNoiseReductionHighPassFilterEnabled: false
         property bool importAdaptiveNoiseReductionAutomaticGainControlEnabled: false
         property bool importAdaptiveNoiseReductionTransientSuppressionEnabled: false
+        property bool importScientificFilterEnabled: false
+        property int importScientificFilterPrototype: 1
+        property int importScientificFilterType: 0
+        property int importScientificFilterOrder: 2
+        property real importScientificFilterCutoffFrequencyHz: 500
+        property real importScientificFilterLowCutoffFrequencyHz: 80
+        property real importScientificFilterHighCutoffFrequencyHz: 600
+        property real importScientificFilterTransitionBandwidthHz: 50
+        property real importScientificFilterStopbandAttenuationDb: 60
+        property real importScientificFilterPassbandRippleDb: 0.5
         property int realtimeAdaptiveNoiseReductionLevel: 1
         property bool realtimeAdaptiveNoiseReductionHighPassFilterEnabled: false
         property bool realtimeAdaptiveNoiseReductionAutomaticGainControlEnabled: false
         property bool realtimeAdaptiveNoiseReductionTransientSuppressionEnabled: false
+        property bool realtimeScientificFilterEnabled: false
+        property int realtimeScientificFilterPrototype: 1
+        property int realtimeScientificFilterType: 0
+        property int realtimeScientificFilterOrder: 2
+        property real realtimeScientificFilterCutoffFrequencyHz: 500
+        property real realtimeScientificFilterLowCutoffFrequencyHz: 80
+        property real realtimeScientificFilterHighCutoffFrequencyHz: 600
+        property real realtimeScientificFilterTransitionBandwidthHz: 50
+        property real realtimeScientificFilterStopbandAttenuationDb: 60
+        property real realtimeScientificFilterPassbandRippleDb: 0.5
     }
 
     property Settings recognitionServiceSettings: Settings {
@@ -82,10 +102,30 @@ QtObject {
     property alias importAdaptiveNoiseReductionHighPassFilterEnabled: signalProcessingSettings.importAdaptiveNoiseReductionHighPassFilterEnabled
     property alias importAdaptiveNoiseReductionAutomaticGainControlEnabled: signalProcessingSettings.importAdaptiveNoiseReductionAutomaticGainControlEnabled
     property alias importAdaptiveNoiseReductionTransientSuppressionEnabled: signalProcessingSettings.importAdaptiveNoiseReductionTransientSuppressionEnabled
+    property alias importScientificFilterEnabled: signalProcessingSettings.importScientificFilterEnabled
+    property alias importScientificFilterPrototype: signalProcessingSettings.importScientificFilterPrototype
+    property alias importScientificFilterType: signalProcessingSettings.importScientificFilterType
+    property alias importScientificFilterOrder: signalProcessingSettings.importScientificFilterOrder
+    property alias importScientificFilterCutoffFrequencyHz: signalProcessingSettings.importScientificFilterCutoffFrequencyHz
+    property alias importScientificFilterLowCutoffFrequencyHz: signalProcessingSettings.importScientificFilterLowCutoffFrequencyHz
+    property alias importScientificFilterHighCutoffFrequencyHz: signalProcessingSettings.importScientificFilterHighCutoffFrequencyHz
+    property alias importScientificFilterTransitionBandwidthHz: signalProcessingSettings.importScientificFilterTransitionBandwidthHz
+    property alias importScientificFilterStopbandAttenuationDb: signalProcessingSettings.importScientificFilterStopbandAttenuationDb
+    property alias importScientificFilterPassbandRippleDb: signalProcessingSettings.importScientificFilterPassbandRippleDb
     property alias realtimeAdaptiveNoiseReductionLevel: signalProcessingSettings.realtimeAdaptiveNoiseReductionLevel
     property alias realtimeAdaptiveNoiseReductionHighPassFilterEnabled: signalProcessingSettings.realtimeAdaptiveNoiseReductionHighPassFilterEnabled
     property alias realtimeAdaptiveNoiseReductionAutomaticGainControlEnabled: signalProcessingSettings.realtimeAdaptiveNoiseReductionAutomaticGainControlEnabled
     property alias realtimeAdaptiveNoiseReductionTransientSuppressionEnabled: signalProcessingSettings.realtimeAdaptiveNoiseReductionTransientSuppressionEnabled
+    property alias realtimeScientificFilterEnabled: signalProcessingSettings.realtimeScientificFilterEnabled
+    property alias realtimeScientificFilterPrototype: signalProcessingSettings.realtimeScientificFilterPrototype
+    property alias realtimeScientificFilterType: signalProcessingSettings.realtimeScientificFilterType
+    property alias realtimeScientificFilterOrder: signalProcessingSettings.realtimeScientificFilterOrder
+    property alias realtimeScientificFilterCutoffFrequencyHz: signalProcessingSettings.realtimeScientificFilterCutoffFrequencyHz
+    property alias realtimeScientificFilterLowCutoffFrequencyHz: signalProcessingSettings.realtimeScientificFilterLowCutoffFrequencyHz
+    property alias realtimeScientificFilterHighCutoffFrequencyHz: signalProcessingSettings.realtimeScientificFilterHighCutoffFrequencyHz
+    property alias realtimeScientificFilterTransitionBandwidthHz: signalProcessingSettings.realtimeScientificFilterTransitionBandwidthHz
+    property alias realtimeScientificFilterStopbandAttenuationDb: signalProcessingSettings.realtimeScientificFilterStopbandAttenuationDb
+    property alias realtimeScientificFilterPassbandRippleDb: signalProcessingSettings.realtimeScientificFilterPassbandRippleDb
     property alias recognitionServiceHostPort: recognitionServiceSettings.recognitionServiceHostPort
     property alias recognitionApiKey: recognitionServiceSettings.recognitionApiKey
 }

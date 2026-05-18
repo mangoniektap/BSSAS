@@ -1028,18 +1028,11 @@ Item {
             }
         }
 
-        Overlay.modal: BlurGlass {
+        background: BlurGlass {
             blurSource: ApplicationWindow.window ? ApplicationWindow.window.contentItem : null
             blurAmount: 64
             borderRadius: 25
             overlayOpacity: 0.3
-        }
-
-        background: Rectangle {
-            radius: 24
-            color: Theme.textWhite
-            border.width: 1
-            border.color: Theme.border
         }
 
         contentItem: Item {
@@ -1261,18 +1254,11 @@ Item {
         closePolicy: Popup.NoAutoClose
         visible: root.pendingImportedAnalysis || root.pendingRealtimeSave
 
-        Overlay.modal: BlurGlass {
+        background: BlurGlass {
             blurSource: ApplicationWindow.window ? ApplicationWindow.window.contentItem : null
             blurAmount: 64
             borderRadius: 25
             overlayOpacity: 0.3
-        }
-
-        background: Rectangle {
-            radius: 24
-            color: root.colorWithAlpha(Theme.primaryLighter, 0.96)
-            border.width: 1
-            border.color: root.colorWithAlpha(Theme.primaryBorder, 0.45)
         }
 
         contentItem: Column {

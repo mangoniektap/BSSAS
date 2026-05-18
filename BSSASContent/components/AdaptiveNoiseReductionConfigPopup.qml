@@ -52,6 +52,13 @@ Popup {
     padding: 0
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
+    Overlay.modal: BlurGlass {
+        blurSource: ApplicationWindow.window ? ApplicationWindow.window.contentItem : null
+        blurAmount: 64
+        borderRadius: 25
+        overlayOpacity: 0.3
+    }
+
     background: Rectangle {
         radius: 24
         color: Theme.textWhite
