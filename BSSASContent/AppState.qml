@@ -56,6 +56,14 @@ QtObject {
         property real gain: 100
         property real analysisTimeLength: 0.2
         property real importAnalysisTimeLength: 0.2
+        property int importAdaptiveNoiseReductionLevel: 1
+        property bool importAdaptiveNoiseReductionHighPassFilterEnabled: false
+        property bool importAdaptiveNoiseReductionAutomaticGainControlEnabled: false
+        property bool importAdaptiveNoiseReductionTransientSuppressionEnabled: false
+        property int realtimeAdaptiveNoiseReductionLevel: 1
+        property bool realtimeAdaptiveNoiseReductionHighPassFilterEnabled: false
+        property bool realtimeAdaptiveNoiseReductionAutomaticGainControlEnabled: false
+        property bool realtimeAdaptiveNoiseReductionTransientSuppressionEnabled: false
     }
 
     property Settings recognitionServiceSettings: Settings {
@@ -70,6 +78,14 @@ QtObject {
     property alias gain: signalProcessingSettings.gain
     property alias analysisTimeLength: signalProcessingSettings.analysisTimeLength
     property alias importAnalysisTimeLength: signalProcessingSettings.importAnalysisTimeLength
+    property alias importAdaptiveNoiseReductionLevel: signalProcessingSettings.importAdaptiveNoiseReductionLevel
+    property alias importAdaptiveNoiseReductionHighPassFilterEnabled: signalProcessingSettings.importAdaptiveNoiseReductionHighPassFilterEnabled
+    property alias importAdaptiveNoiseReductionAutomaticGainControlEnabled: signalProcessingSettings.importAdaptiveNoiseReductionAutomaticGainControlEnabled
+    property alias importAdaptiveNoiseReductionTransientSuppressionEnabled: signalProcessingSettings.importAdaptiveNoiseReductionTransientSuppressionEnabled
+    property alias realtimeAdaptiveNoiseReductionLevel: signalProcessingSettings.realtimeAdaptiveNoiseReductionLevel
+    property alias realtimeAdaptiveNoiseReductionHighPassFilterEnabled: signalProcessingSettings.realtimeAdaptiveNoiseReductionHighPassFilterEnabled
+    property alias realtimeAdaptiveNoiseReductionAutomaticGainControlEnabled: signalProcessingSettings.realtimeAdaptiveNoiseReductionAutomaticGainControlEnabled
+    property alias realtimeAdaptiveNoiseReductionTransientSuppressionEnabled: signalProcessingSettings.realtimeAdaptiveNoiseReductionTransientSuppressionEnabled
     property alias recognitionServiceHostPort: recognitionServiceSettings.recognitionServiceHostPort
     property alias recognitionApiKey: recognitionServiceSettings.recognitionApiKey
 }

@@ -15,7 +15,8 @@
         "CMAKE_MAKE_PROGRAM": "D:/QT/Tools/Ninja/ninja.exe",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_C_COMPILER": "cl.exe",
-        "CMAKE_CXX_COMPILER": "cl.exe"
+        "CMAKE_CXX_COMPILER": "cl.exe",
+        "WEBRTC_AUDIO_PROCESSING_ROOT": "${sourceDir}/webrtc-install"
       }
     },
     {

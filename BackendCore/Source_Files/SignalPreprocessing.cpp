@@ -123,6 +123,32 @@ int normalizeNotchFrequencyMode(int mode)
         : NotchFrequencyFixed;
 }
 
+int normalizeWebRtcNoiseSuppressionLevel(int level)
+{
+    return std::clamp(
+        level,
+        static_cast<int>(AdaptiveNoiseReduction::NoiseSuppressionLow),
+        static_cast<int>(AdaptiveNoiseReduction::NoiseSuppressionVeryHigh));
+}
+
+AdaptiveNoiseReduction::Parameters normalizeAdaptiveNoiseReductionParameters(
+    AdaptiveNoiseReduction::Parameters parameters)
+{
+    parameters.noiseSuppressionLevel =
+        normalizeWebRtcNoiseSuppressionLevel(parameters.noiseSuppressionLevel);
+    return parameters;
+}
+
+bool adaptiveNoiseReductionParametersEqual(
+    const AdaptiveNoiseReduction::Parameters& left,
+    const AdaptiveNoiseReduction::Parameters& right)
+{
+    return left.noiseSuppressionLevel == right.noiseSuppressionLevel &&
+        left.highPassFilterEnabled == right.highPassFilterEnabled &&
+        left.automaticGainControlEnabled == right.automaticGainControlEnabled &&
+        left.transientSuppressionEnabled == right.transientSuppressionEnabled;
+}
+
 std::array<double, kPowerlineNotchCount> fixedPowerlineFrequencies()
 {
     return kPowerlineFrequenciesHz;
@@ -1026,11 +1052,13 @@ QVector<float> runRealtimePreprocessPipeline(
             processedData = AdaptiveNoiseReduction::denoiseStreaming(
                 processedData,
                 effectiveSampleRate,
-                *adaptiveStreamingState);
+                *adaptiveStreamingState,
+                options.adaptiveNoiseReductionParameters);
         } else {
             processedData = AdaptiveNoiseReduction::denoise(
                 processedData,
-                effectiveSampleRate);
+                effectiveSampleRate,
+                options.adaptiveNoiseReductionParameters);
         }
     }
 
@@ -1136,6 +1164,30 @@ bool SignalPreprocessing::importAdaptiveNoiseReductionEnabled() const
     return m_importAdaptiveNoiseReductionEnabled;
 }
 
+int SignalPreprocessing::importAdaptiveNoiseReductionLevel() const
+{
+    QMutexLocker locker(&m_importSettingsMutex);
+    return m_importAdaptiveNoiseReductionParameters.noiseSuppressionLevel;
+}
+
+bool SignalPreprocessing::importAdaptiveNoiseReductionHighPassFilterEnabled() const
+{
+    QMutexLocker locker(&m_importSettingsMutex);
+    return m_importAdaptiveNoiseReductionParameters.highPassFilterEnabled;
+}
+
+bool SignalPreprocessing::importAdaptiveNoiseReductionAutomaticGainControlEnabled() const
+{
+    QMutexLocker locker(&m_importSettingsMutex);
+    return m_importAdaptiveNoiseReductionParameters.automaticGainControlEnabled;
+}
+
+bool SignalPreprocessing::importAdaptiveNoiseReductionTransientSuppressionEnabled() const
+{
+    QMutexLocker locker(&m_importSettingsMutex);
+    return m_importAdaptiveNoiseReductionParameters.transientSuppressionEnabled;
+}
+
 bool SignalPreprocessing::importWaveletDenoisingEnabled() const
 {
     QMutexLocker locker(&m_importSettingsMutex);
@@ -1200,6 +1252,30 @@ bool SignalPreprocessing::realtimeAdaptiveNoiseReductionEnabled() const
 {
     QMutexLocker locker(&m_realtimeSettingsMutex);
     return m_realtimeAdaptiveNoiseReductionEnabled;
+}
+
+int SignalPreprocessing::realtimeAdaptiveNoiseReductionLevel() const
+{
+    QMutexLocker locker(&m_realtimeSettingsMutex);
+    return m_realtimeAdaptiveNoiseReductionParameters.noiseSuppressionLevel;
+}
+
+bool SignalPreprocessing::realtimeAdaptiveNoiseReductionHighPassFilterEnabled() const
+{
+    QMutexLocker locker(&m_realtimeSettingsMutex);
+    return m_realtimeAdaptiveNoiseReductionParameters.highPassFilterEnabled;
+}
+
+bool SignalPreprocessing::realtimeAdaptiveNoiseReductionAutomaticGainControlEnabled() const
+{
+    QMutexLocker locker(&m_realtimeSettingsMutex);
+    return m_realtimeAdaptiveNoiseReductionParameters.automaticGainControlEnabled;
+}
+
+bool SignalPreprocessing::realtimeAdaptiveNoiseReductionTransientSuppressionEnabled() const
+{
+    QMutexLocker locker(&m_realtimeSettingsMutex);
+    return m_realtimeAdaptiveNoiseReductionParameters.transientSuppressionEnabled;
 }
 
 bool SignalPreprocessing::realtimeWaveletDenoisingEnabled() const
@@ -1340,6 +1416,73 @@ void SignalPreprocessing::setImportAdaptiveNoiseReductionEnabled(bool enabled)
     }
 
     emit importAdaptiveNoiseReductionEnabledChanged();
+    emit importProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setImportAdaptiveNoiseReductionLevel(int level)
+{
+    const int normalizedLevel = normalizeWebRtcNoiseSuppressionLevel(level);
+    {
+        QMutexLocker locker(&m_importSettingsMutex);
+        if (m_importAdaptiveNoiseReductionParameters.noiseSuppressionLevel ==
+            normalizedLevel) {
+            return;
+        }
+        m_importAdaptiveNoiseReductionParameters.noiseSuppressionLevel =
+            normalizedLevel;
+    }
+
+    emit importAdaptiveNoiseReductionParametersChanged();
+    emit importProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setImportAdaptiveNoiseReductionHighPassFilterEnabled(
+    bool enabled)
+{
+    {
+        QMutexLocker locker(&m_importSettingsMutex);
+        if (m_importAdaptiveNoiseReductionParameters.highPassFilterEnabled ==
+            enabled) {
+            return;
+        }
+        m_importAdaptiveNoiseReductionParameters.highPassFilterEnabled = enabled;
+    }
+
+    emit importAdaptiveNoiseReductionParametersChanged();
+    emit importProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setImportAdaptiveNoiseReductionAutomaticGainControlEnabled(
+    bool enabled)
+{
+    {
+        QMutexLocker locker(&m_importSettingsMutex);
+        if (m_importAdaptiveNoiseReductionParameters
+                .automaticGainControlEnabled == enabled) {
+            return;
+        }
+        m_importAdaptiveNoiseReductionParameters.automaticGainControlEnabled =
+            enabled;
+    }
+
+    emit importAdaptiveNoiseReductionParametersChanged();
+    emit importProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setImportAdaptiveNoiseReductionTransientSuppressionEnabled(
+    bool enabled)
+{
+    {
+        QMutexLocker locker(&m_importSettingsMutex);
+        if (m_importAdaptiveNoiseReductionParameters
+                .transientSuppressionEnabled == enabled) {
+            return;
+        }
+        m_importAdaptiveNoiseReductionParameters.transientSuppressionEnabled =
+            enabled;
+    }
+
+    emit importAdaptiveNoiseReductionParametersChanged();
     emit importProcessingSettingsChanged();
 }
 
@@ -1531,6 +1674,73 @@ void SignalPreprocessing::setRealtimeAdaptiveNoiseReductionEnabled(bool enabled)
     emit realtimeProcessingSettingsChanged();
 }
 
+void SignalPreprocessing::setRealtimeAdaptiveNoiseReductionLevel(int level)
+{
+    const int normalizedLevel = normalizeWebRtcNoiseSuppressionLevel(level);
+    {
+        QMutexLocker locker(&m_realtimeSettingsMutex);
+        if (m_realtimeAdaptiveNoiseReductionParameters.noiseSuppressionLevel ==
+            normalizedLevel) {
+            return;
+        }
+        m_realtimeAdaptiveNoiseReductionParameters.noiseSuppressionLevel =
+            normalizedLevel;
+    }
+
+    emit realtimeAdaptiveNoiseReductionParametersChanged();
+    emit realtimeProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setRealtimeAdaptiveNoiseReductionHighPassFilterEnabled(
+    bool enabled)
+{
+    {
+        QMutexLocker locker(&m_realtimeSettingsMutex);
+        if (m_realtimeAdaptiveNoiseReductionParameters.highPassFilterEnabled ==
+            enabled) {
+            return;
+        }
+        m_realtimeAdaptiveNoiseReductionParameters.highPassFilterEnabled = enabled;
+    }
+
+    emit realtimeAdaptiveNoiseReductionParametersChanged();
+    emit realtimeProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setRealtimeAdaptiveNoiseReductionAutomaticGainControlEnabled(
+    bool enabled)
+{
+    {
+        QMutexLocker locker(&m_realtimeSettingsMutex);
+        if (m_realtimeAdaptiveNoiseReductionParameters
+                .automaticGainControlEnabled == enabled) {
+            return;
+        }
+        m_realtimeAdaptiveNoiseReductionParameters.automaticGainControlEnabled =
+            enabled;
+    }
+
+    emit realtimeAdaptiveNoiseReductionParametersChanged();
+    emit realtimeProcessingSettingsChanged();
+}
+
+void SignalPreprocessing::setRealtimeAdaptiveNoiseReductionTransientSuppressionEnabled(
+    bool enabled)
+{
+    {
+        QMutexLocker locker(&m_realtimeSettingsMutex);
+        if (m_realtimeAdaptiveNoiseReductionParameters
+                .transientSuppressionEnabled == enabled) {
+            return;
+        }
+        m_realtimeAdaptiveNoiseReductionParameters.transientSuppressionEnabled =
+            enabled;
+    }
+
+    emit realtimeAdaptiveNoiseReductionParametersChanged();
+    emit realtimeProcessingSettingsChanged();
+}
+
 void SignalPreprocessing::setRealtimeWaveletDenoisingEnabled(bool enabled)
 {
     {
@@ -1702,7 +1912,8 @@ QVector<float> SignalPreprocessing::filterDataImport(
         adaptiveTimer.start();
         preprocessedData = AdaptiveNoiseReduction::denoise(
             preprocessedData,
-            effectiveSampleRate);
+            effectiveSampleRate,
+            importOptions.adaptiveNoiseReductionParameters);
         timingSummary.insert(
             QStringLiteral("adaptiveNoiseReductionMs"),
             elapsedMilliseconds(adaptiveTimer));
@@ -1804,6 +2015,9 @@ SignalPreprocessOptions SignalPreprocessing::importPreprocessOptions() const
         options.notchFrequencyMode = m_importNotchFrequencyMode;
         options.firFilterEnabled = m_importFirFilterEnabled;
         options.adaptiveNoiseReductionEnabled = m_importAdaptiveNoiseReductionEnabled;
+        options.adaptiveNoiseReductionParameters =
+            normalizeAdaptiveNoiseReductionParameters(
+                m_importAdaptiveNoiseReductionParameters);
         options.waveletEnabled = m_importWaveletDenoisingEnabled;
         options.transientNoiseSuppressionEnabled = m_importTransientNoiseSuppressionEnabled;
         options.motionArtifactReductionEnabled = m_importMotionArtifactReductionEnabled;
@@ -1823,6 +2037,9 @@ SignalPreprocessOptions SignalPreprocessing::realtimePreprocessOptions() const
         options.firFilterEnabled = m_realtimeFirFilterEnabled;
         options.activeNoiseCancellationEnabled = m_realtimeActiveNoiseCancellationEnabled;
         options.adaptiveNoiseReductionEnabled = m_realtimeAdaptiveNoiseReductionEnabled;
+        options.adaptiveNoiseReductionParameters =
+            normalizeAdaptiveNoiseReductionParameters(
+                m_realtimeAdaptiveNoiseReductionParameters);
         options.waveletEnabled = m_realtimeWaveletDenoisingEnabled;
         options.transientNoiseSuppressionEnabled = m_realtimeTransientNoiseSuppressionEnabled;
         options.motionArtifactReductionEnabled = m_realtimeMotionArtifactReductionEnabled;
@@ -1913,13 +2130,18 @@ void PreprocessingWorker::processing()
     const bool denoiseConfigChanged =
         m_realtimeDenoiseSampleRate != configuredSampleRate ||
         m_realtimeAncEnabled != realtimeOptions.activeNoiseCancellationEnabled ||
-        m_realtimeAdaptiveEnabled != realtimeOptions.adaptiveNoiseReductionEnabled;
+        m_realtimeAdaptiveEnabled != realtimeOptions.adaptiveNoiseReductionEnabled ||
+        !adaptiveNoiseReductionParametersEqual(
+            m_realtimeAdaptiveParameters,
+            realtimeOptions.adaptiveNoiseReductionParameters);
 
     if (denoiseConfigChanged) {
         resetRealtimeDenoiseStates();
         m_realtimeDenoiseSampleRate = configuredSampleRate;
         m_realtimeAncEnabled = realtimeOptions.activeNoiseCancellationEnabled;
         m_realtimeAdaptiveEnabled = realtimeOptions.adaptiveNoiseReductionEnabled;
+        m_realtimeAdaptiveParameters =
+            realtimeOptions.adaptiveNoiseReductionParameters;
     }
 
     const bool preFilterConfigChanged =
@@ -2036,19 +2258,30 @@ void PreprocessingWorker::flushProcessing()
             ActiveNoiseCancellation::flush(
                 m_realtimeAncStates[static_cast<size_t>(channel)],
                 &metrics);
-        if (preprocessedData.isEmpty()) {
-            continue;
-        }
 
-        if (realtimeOptions.activeNoiseCancellationEnabled) {
+        if (realtimeOptions.activeNoiseCancellationEnabled &&
+            !preprocessedData.isEmpty()) {
             logAncDebugMetrics(channel, preprocessedData.size(), 0, metrics);
         }
 
         if (realtimeOptions.adaptiveNoiseReductionEnabled) {
-            preprocessedData = AdaptiveNoiseReduction::denoiseStreaming(
-                preprocessedData,
-                effectiveSampleRate,
-                m_realtimeAdaptiveStates[static_cast<size_t>(channel)]);
+            if (!preprocessedData.isEmpty()) {
+                preprocessedData = AdaptiveNoiseReduction::denoiseStreaming(
+                    preprocessedData,
+                    effectiveSampleRate,
+                    m_realtimeAdaptiveStates[static_cast<size_t>(channel)],
+                    realtimeOptions.adaptiveNoiseReductionParameters);
+            }
+            const QVector<float> adaptiveTail =
+                AdaptiveNoiseReduction::flushStreaming(
+                    effectiveSampleRate,
+                    m_realtimeAdaptiveStates[static_cast<size_t>(channel)],
+                    realtimeOptions.adaptiveNoiseReductionParameters);
+            preprocessedData += adaptiveTail;
+        }
+
+        if (preprocessedData.isEmpty()) {
+            continue;
         }
 
         preprocessedData = applyRealtimeGain(preprocessedData, realtimeOptions.gain);

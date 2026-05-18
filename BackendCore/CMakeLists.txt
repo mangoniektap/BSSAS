@@ -56,6 +56,7 @@ target_link_libraries(BackendCore PUBLIC
     kfr_dsp
     kfr_dft
     kfr_io
+    WebRTCAudioProcessing
 )
 
 target_link_libraries(BackendCore PRIVATE

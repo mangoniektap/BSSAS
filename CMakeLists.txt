@@ -111,6 +111,20 @@ set(GENERATE_REPORT_TEMPLATE "${CMAKE_CURRENT_SOURCE_DIR}/${GENERATE_REPORT_TEMP
 set(BSSAS_ABDOMEN_MODEL_RELATIVE "3D_Resources/3D model of abdomen.glb")
 set(BSSAS_ABDOMEN_MODEL "${CMAKE_CURRENT_SOURCE_DIR}/${BSSAS_ABDOMEN_MODEL_RELATIVE}")
 set(BSSAS_DISTRIBUTION_DIR_NAME "distribution")
+set(WEBRTC_AUDIO_PROCESSING_ROOT
+    "${CMAKE_CURRENT_SOURCE_DIR}/webrtc-install"
+    CACHE PATH
+    "Bundled WebRTC Audio Processing install root"
+)
+set(WEBRTC_AUDIO_PROCESSING_INCLUDE_DIR
+    "${WEBRTC_AUDIO_PROCESSING_ROOT}/include"
+)
+set(WEBRTC_AUDIO_PROCESSING_LIB
+    "${WEBRTC_AUDIO_PROCESSING_ROOT}/lib/webrtc-audio-processing-2.lib"
+)
+set(WEBRTC_AUDIO_PROCESSING_DLL
+    "${WEBRTC_AUDIO_PROCESSING_ROOT}/bin/webrtc-audio-processing-2-1.dll"
+)
 set(BSSAS_APP_ICON_ICO "${CMAKE_CURRENT_SOURCE_DIR}/AppIcon.ico")
 set(BSSAS_EXECUTABLE_NAME "${CMAKE_PROJECT_NAME}")
 set(BSSAS_EXECUTABLE_FILENAME "${BSSAS_EXECUTABLE_NAME}.exe")
@@ -216,6 +230,18 @@ bssas_collect_existing_paths(
     ${BSSAS_REQUIRED_REPORT_FILENAMES}
 )
 bssas_require_existing_path("${BSSAS_ABDOMEN_MODEL}" "3D abdomen model")
+bssas_require_existing_path(
+    "${WEBRTC_AUDIO_PROCESSING_INCLUDE_DIR}/webrtc-audio-processing-2/api/audio/audio_processing.h"
+    "WebRTC Audio Processing headers"
+)
+bssas_require_existing_path(
+    "${WEBRTC_AUDIO_PROCESSING_LIB}"
+    "WebRTC Audio Processing import library"
+)
+bssas_require_existing_path(
+    "${WEBRTC_AUDIO_PROCESSING_DLL}"
+    "WebRTC Audio Processing runtime DLL"
+)
 
 configure_file(
     "${BSSAS_INNO_SCRIPT_TEMPLATE}"
@@ -237,6 +263,20 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(KFR_DIR "${CMAKE_CURRENT_SOURCE_DIR}/kfr-windows-x86_64/lib/cmake/kfr")
 find_package(KFR CONFIG REQUIRED)
+
+add_library(WebRTCAudioProcessing SHARED IMPORTED GLOBAL)
+set_target_properties(WebRTCAudioProcessing PROPERTIES
+    IMPORTED_IMPLIB "${WEBRTC_AUDIO_PROCESSING_LIB}"
+    IMPORTED_LOCATION "${WEBRTC_AUDIO_PROCESSING_DLL}"
+    INTERFACE_INCLUDE_DIRECTORIES
+        "${WEBRTC_AUDIO_PROCESSING_INCLUDE_DIR};${WEBRTC_AUDIO_PROCESSING_INCLUDE_DIR}/webrtc-audio-processing-2"
+    INTERFACE_COMPILE_DEFINITIONS
+        "WEBRTC_WIN;__STDC_FORMAT_MACROS=1;NOMINMAX;_USE_MATH_DEFINES"
+)
+
+if (WIN32)
+    target_link_libraries(WebRTCAudioProcessing INTERFACE winmm)
+endif()
 
 find_package(Qt6 6.10.1 REQUIRED COMPONENTS
     Core
@@ -373,6 +413,9 @@ add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:UsbDaq4203>
         $<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:WebRTCAudioProcessing>
+        $<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${PYTHON_MODULES_DIR}"
         "$<TARGET_FILE_DIR:${CMAKE_PROJECT_NAME}>/PythonModules"
@@ -449,6 +492,10 @@ install(TARGETS ${BSSAS_UPDATER_EXECUTABLE_NAME}
 )
 
 install(FILES "${BACKENDCORE_USB_DAQ4203_DLL}"
+    DESTINATION ${BSSAS_INSTALL_APP_DIR}
+)
+
+install(FILES "${WEBRTC_AUDIO_PROCESSING_DLL}"
     DESTINATION ${BSSAS_INSTALL_APP_DIR}
 )
 

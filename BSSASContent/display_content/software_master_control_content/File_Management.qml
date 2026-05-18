@@ -159,6 +159,37 @@ Item {
         signalPreprocessing.setAllImportProcessingEnabled(!!enabledValue)
     }
 
+    function normalizedAdaptiveNoiseReductionLevel(value) {
+        const numericValue = Number(value)
+        if (!isFinite(numericValue))
+            return 1
+        return Math.max(0, Math.min(3, Math.round(numericValue)))
+    }
+
+    function openImportAdaptiveNoiseReductionConfig() {
+        importAdaptiveNoiseReductionConfigPopup.level =
+            root.normalizedAdaptiveNoiseReductionLevel(AppState.importAdaptiveNoiseReductionLevel)
+        importAdaptiveNoiseReductionConfigPopup.highPassFilterEnabled =
+            !!AppState.importAdaptiveNoiseReductionHighPassFilterEnabled
+        importAdaptiveNoiseReductionConfigPopup.automaticGainControlEnabled =
+            !!AppState.importAdaptiveNoiseReductionAutomaticGainControlEnabled
+        importAdaptiveNoiseReductionConfigPopup.transientSuppressionEnabled =
+            !!AppState.importAdaptiveNoiseReductionTransientSuppressionEnabled
+        importAdaptiveNoiseReductionConfigPopup.open()
+    }
+
+    function saveImportAdaptiveNoiseReductionConfig() {
+        AppState.importAdaptiveNoiseReductionLevel =
+            root.normalizedAdaptiveNoiseReductionLevel(importAdaptiveNoiseReductionConfigPopup.level)
+        AppState.importAdaptiveNoiseReductionHighPassFilterEnabled =
+            importAdaptiveNoiseReductionConfigPopup.highPassFilterEnabled
+        AppState.importAdaptiveNoiseReductionAutomaticGainControlEnabled =
+            importAdaptiveNoiseReductionConfigPopup.automaticGainControlEnabled
+        AppState.importAdaptiveNoiseReductionTransientSuppressionEnabled =
+            importAdaptiveNoiseReductionConfigPopup.transientSuppressionEnabled
+        importAdaptiveNoiseReductionConfigPopup.close()
+    }
+
     Connections {
         target: multiFeatureJointDetection
 
@@ -228,6 +259,7 @@ Item {
         anchors.fill: parent
         clip: true
         contentWidth: availableWidth
+        contentHeight: mainColumn.implicitHeight
         leftPadding: 30
         topPadding: 30
         rightPadding: 30
@@ -237,6 +269,7 @@ Item {
         ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AlwaysOff }
 
         ColumnLayout {
+            id: mainColumn
             width: pageScrollView.availableWidth
             spacing: 24
 
@@ -523,6 +556,73 @@ Item {
                         }
                     }
 
+                    RowLayout {
+                        id: importAdaptiveNoiseReductionConfigAnchor
+
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 40
+                        spacing: 10
+
+                        Text {
+                            text: qsTr("自适应降噪参数")
+                            font.pixelSize: 14
+                            color: Theme.textPrimary
+                        }
+
+                        Item {
+                            Layout.fillWidth: true
+                        }
+
+                        Button {
+                            id: importAdaptiveNoiseReductionConfigButton
+
+                            Layout.preferredWidth: 96
+                            Layout.preferredHeight: 36
+                            hoverEnabled: true
+                            text: qsTr("配置")
+
+                            contentItem: Text {
+                                text: importAdaptiveNoiseReductionConfigButton.text
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 14
+                                color: importAdaptiveNoiseReductionConfigButton.enabled
+                                    ? Theme.primary
+                                    : root.colorWithAlpha(Theme.textPrimary, 0.38)
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            background: Rectangle {
+                                radius: 18
+                                border.width: 1
+                                border.color: importAdaptiveNoiseReductionConfigButton.hovered
+                                    || importAdaptiveNoiseReductionConfigPopup.visible
+                                    ? Theme.primary
+                                    : root.defaultBorderColor
+                                color: importAdaptiveNoiseReductionConfigButton.down
+                                    ? root.colorWithAlpha(Theme.primary, 0.16)
+                                    : (importAdaptiveNoiseReductionConfigButton.hovered
+                                        || importAdaptiveNoiseReductionConfigPopup.visible
+                                        ? root.colorWithAlpha(Theme.primary, 0.08)
+                                        : "transparent")
+
+                                Behavior on border.color {
+                                    ColorAnimation {
+                                        duration: 150
+                                    }
+                                }
+
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: 150
+                                    }
+                                }
+                            }
+
+                            onClicked: root.openImportAdaptiveNoiseReductionConfig()
+                        }
+                    }
+
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 12
@@ -628,7 +728,6 @@ Item {
                                     }
                                 }
                             }
-                        }
                     }
                 }
             }
@@ -741,10 +840,10 @@ Item {
         active: false
         sourceComponent: Component {
             TimeFrequencyAnalysisReport {
-                width: root.pageRoot ? (root.pageRoot.width * 3) / 4 : 0
-                height: root.pageRoot ? root.pageRoot.height : 0
-                x: root.pageRoot ? root.pageRoot.x : 0
-                y: root.pageRoot ? root.pageRoot.y - 200 : -200
+                parent: Overlay.overlay
+                anchors.centerIn: parent
+                width: parent ? (parent.width * 3) / 4 : 800
+                height: parent ? parent.height - 100 : 600
             }
         }
 
@@ -757,51 +856,319 @@ Item {
         }
     }
 
-    Item {
-        anchors.fill: parent
-        visible: root.pendingImportedAnalysis || root.pendingRealtimeSave
-        z: 1000
+    Popup {
+        id: importAdaptiveNoiseReductionConfigPopup
 
-        Rectangle {
-            anchors.fill: parent
-            color: root.colorWithAlpha(Theme.cardBg, 0.84)
-        }
+        property int level: 1
+        property bool highPassFilterEnabled: false
+        property bool automaticGainControlEnabled: false
+        property bool transientSuppressionEnabled: false
 
-        MouseArea {
-            anchors.fill: parent
-            acceptedButtons: Qt.AllButtons
-        }
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.max(280, Math.min((parent ? parent.width : 640) - 60, 560))
+        modal: true
+        focus: true
+        padding: 0
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
-        Rectangle {
-            width: 240
-            height: 220
-            anchors.centerIn: parent
-            radius: 24
-            color: root.colorWithAlpha(Theme.primaryLighter, 0.96)
-            border.width: 1
-            border.color: root.colorWithAlpha(Theme.primaryBorder, 0.45)
-
-            Column {
-                anchors.centerIn: parent
-                spacing: 20
-
-                StandbyAnimation {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: 78
-                    height: 78
-                    blockColor: Theme.primary
-                    running: root.pendingImportedAnalysis || root.pendingRealtimeSave
+        enter: Transition {
+            ParallelAnimation {
+                NumberAnimation {
+                    target: importAdaptiveNoiseReductionConfigPopup
+                    property: "opacity"
+                    from: 0
+                    to: 1
+                    duration: 120
+                    easing.type: Easing.OutQuad
                 }
 
+                NumberAnimation {
+                    target: importAdaptiveNoiseReductionConfigPopup
+                    property: "scale"
+                    from: 0.94
+                    to: 1
+                    duration: 180
+                    easing.type: Easing.OutBack
+                }
+            }
+        }
+
+        exit: Transition {
+            ParallelAnimation {
+                NumberAnimation {
+                    target: importAdaptiveNoiseReductionConfigPopup
+                    property: "opacity"
+                    from: 1
+                    to: 0
+                    duration: 100
+                    easing.type: Easing.InQuad
+                }
+
+                NumberAnimation {
+                    target: importAdaptiveNoiseReductionConfigPopup
+                    property: "scale"
+                    from: 1
+                    to: 0.96
+                    duration: 100
+                    easing.type: Easing.InQuad
+                }
+            }
+        }
+
+        background: Rectangle {
+            radius: 24
+            color: Theme.textWhite
+            border.width: 1
+            border.color: Theme.border
+        }
+
+        contentItem: Item {
+            implicitHeight: popupColumn.implicitHeight + 44
+
+            ColumnLayout {
+                id: popupColumn
+                anchors.fill: parent
+                anchors.margins: 22
+                spacing: 16
+
                 Text {
-                    width: 180
-                    horizontalAlignment: Text.AlignHCenter
+                    Layout.fillWidth: true
+                    text: qsTr("导入自适应降噪参数")
+                    color: Theme.textTitle
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 24
+                    font.bold: true
                     wrapMode: Text.WordWrap
-                    text: root.pendingRealtimeSave ? qsTr("实时数据保存处理中...") : root.importStatusText
-                    color: Theme.textPrimary
-                    font.pixelSize: 16
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 50
+                    spacing: 12
+
+                    Text {
+                        text: qsTr("降噪强度")
+                        color: Theme.textPrimary
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 15
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+
+                    Select {
+                        id: importAdaptiveNoiseReductionLevelSelect
+
+                        Layout.preferredWidth: 180
+                        Layout.preferredHeight: 46
+                        currentIndex: importAdaptiveNoiseReductionConfigPopup.level
+                        delegateHeight: 30
+                        visibleCount: 4
+                        popupPadding: 5
+                        showScrollIndicator: false
+                        textColor: Theme.textPrimary
+                        outlineColor: Theme.primaryBorder
+                        activeOutlineColor: Theme.primary
+                        indicatorColor: Theme.primary
+                        optionHighlightColor: root.colorWithAlpha(Theme.primary, 0.12)
+                        popupColor: Theme.textWhite
+                        popupBorderColor: Theme.primaryBorder
+                        model: ["Low", "Moderate", "High", "VeryHigh"]
+                        onCurrentIndexChanged: importAdaptiveNoiseReductionConfigPopup.level =
+                            root.normalizedAdaptiveNoiseReductionLevel(currentIndex)
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 1
+                    color: root.colorWithAlpha(Theme.primary, 0.18)
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 38
+                        implicitHeight: 38
+
+                        MouseArea {
+                            anchors.fill: parent
+                            z: 1
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: importAdaptiveNoiseReductionConfigPopup.highPassFilterEnabled =
+                                !importAdaptiveNoiseReductionConfigPopup.highPassFilterEnabled
+                        }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            z: 0
+                            spacing: 12
+
+                            Text {
+                                text: qsTr("高通滤波")
+                                color: Theme.textPrimary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 15
+                            }
+
+                            Item {
+                                Layout.fillWidth: true
+                            }
+
+                            ToggleSwitch {
+                                checked: importAdaptiveNoiseReductionConfigPopup.highPassFilterEnabled
+                                interactive: false
+                            }
+                        }
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 38
+                        implicitHeight: 38
+
+                        MouseArea {
+                            anchors.fill: parent
+                            z: 1
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: importAdaptiveNoiseReductionConfigPopup.automaticGainControlEnabled =
+                                !importAdaptiveNoiseReductionConfigPopup.automaticGainControlEnabled
+                        }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            z: 0
+                            spacing: 12
+
+                            Text {
+                                text: qsTr("自动增益控制")
+                                color: Theme.textPrimary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 15
+                            }
+
+                            Item {
+                                Layout.fillWidth: true
+                            }
+
+                            ToggleSwitch {
+                                checked: importAdaptiveNoiseReductionConfigPopup.automaticGainControlEnabled
+                                interactive: false
+                            }
+                        }
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 38
+                        implicitHeight: 38
+
+                        MouseArea {
+                            anchors.fill: parent
+                            z: 1
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: importAdaptiveNoiseReductionConfigPopup.transientSuppressionEnabled =
+                                !importAdaptiveNoiseReductionConfigPopup.transientSuppressionEnabled
+                        }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            z: 0
+                            spacing: 12
+
+                            Text {
+                                text: qsTr("瞬态抑制")
+                                color: Theme.textPrimary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 15
+                            }
+
+                            Item {
+                                Layout.fillWidth: true
+                            }
+
+                            ToggleSwitch {
+                                checked: importAdaptiveNoiseReductionConfigPopup.transientSuppressionEnabled
+                                interactive: false
+                            }
+                        }
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+
+                    Button {
+                        text: qsTr("恢复默认")
+                        onClicked: {
+                            importAdaptiveNoiseReductionConfigPopup.level = 1
+                            importAdaptiveNoiseReductionConfigPopup.highPassFilterEnabled = false
+                            importAdaptiveNoiseReductionConfigPopup.automaticGainControlEnabled = false
+                            importAdaptiveNoiseReductionConfigPopup.transientSuppressionEnabled = false
+                        }
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+
+                    Button {
+                        text: qsTr("取消")
+                        onClicked: importAdaptiveNoiseReductionConfigPopup.close()
+                    }
+
+                    Button {
+                        text: qsTr("保存")
+                        onClicked: root.saveImportAdaptiveNoiseReductionConfig()
+                    }
                 }
             }
         }
     }
+
+    Popup {
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: 240
+        height: 220
+        modal: true
+        closePolicy: Popup.NoAutoClose
+        visible: root.pendingImportedAnalysis || root.pendingRealtimeSave
+
+        background: Rectangle {
+            radius: 24
+            color: root.colorWithAlpha(Theme.primaryLighter, 0.96)
+            border.width: 1
+            border.color: root.colorWithAlpha(Theme.primaryBorder, 0.45)
+        }
+
+        contentItem: Column {
+            anchors.centerIn: parent
+            spacing: 20
+
+            StandbyAnimation {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: 78
+                height: 78
+                blockColor: Theme.primary
+                running: root.pendingImportedAnalysis || root.pendingRealtimeSave
+            }
+
+            Text {
+                width: 180
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                text: root.pendingRealtimeSave ? qsTr("实时数据保存处理中...") : root.importStatusText
+                color: Theme.textPrimary
+                font.pixelSize: 16
+            }
+        }
+    }
+}
 }

@@ -661,50 +661,41 @@ Page {
         */
     }
 
-    Item {
-        anchors.fill: parent
+    Popup {
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: 240
+        height: 220
+        modal: true
+        closePolicy: Popup.NoAutoClose
         visible: root.pendingRealtimeSave
-        z: 1000
 
-        Rectangle {
-            anchors.fill: parent
-            color: root.colorWithAlpha(Theme.cardBg, 0.84)
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            acceptedButtons: Qt.AllButtons
-        }
-
-        Rectangle {
-            width: 240
-            height: 220
-            anchors.centerIn: parent
+        background: Rectangle {
             radius: 24
             color: root.colorWithAlpha(Theme.primaryLighter, 0.96)
             border.width: 1
             border.color: root.colorWithAlpha(Theme.primaryBorder, 0.45)
+        }
 
-            Column {
-                anchors.centerIn: parent
-                spacing: 20
+        contentItem: Column {
+            anchors.centerIn: parent
+            spacing: 20
 
-                StandbyAnimation {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: 78
-                    height: 78
-                    blockColor: Theme.primary
-                    running: root.pendingRealtimeSave
-                }
+            StandbyAnimation {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: 78
+                height: 78
+                blockColor: Theme.primary
+                running: root.pendingRealtimeSave
+            }
 
-                Text {
-                    width: 180
-                    horizontalAlignment: Text.AlignHCenter
-                    wrapMode: Text.WordWrap
-                    text: qsTr("实时数据保存处理中...")
-                    color: Theme.textPrimary
-                    font.pixelSize: 16
-                }
+            Text {
+                width: 180
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                text: qsTr("实时数据保存处理中...")
+                color: Theme.textPrimary
+                font.pixelSize: 16
             }
         }
     }

@@ -125,6 +125,37 @@ Item {
         signalPreprocessing.setAllRealtimeProcessingEnabled(!!enabledValue)
     }
 
+    function normalizedAdaptiveNoiseReductionLevel(value) {
+        const numericValue = Number(value)
+        if (!isFinite(numericValue))
+            return 1
+        return Math.max(0, Math.min(3, Math.round(numericValue)))
+    }
+
+    function openRealtimeAdaptiveNoiseReductionConfig() {
+        realtimeAdaptiveNoiseReductionConfigPopup.level =
+            root.normalizedAdaptiveNoiseReductionLevel(AppState.realtimeAdaptiveNoiseReductionLevel)
+        realtimeAdaptiveNoiseReductionConfigPopup.highPassFilterEnabled =
+            !!AppState.realtimeAdaptiveNoiseReductionHighPassFilterEnabled
+        realtimeAdaptiveNoiseReductionConfigPopup.automaticGainControlEnabled =
+            !!AppState.realtimeAdaptiveNoiseReductionAutomaticGainControlEnabled
+        realtimeAdaptiveNoiseReductionConfigPopup.transientSuppressionEnabled =
+            !!AppState.realtimeAdaptiveNoiseReductionTransientSuppressionEnabled
+        realtimeAdaptiveNoiseReductionConfigPopup.open()
+    }
+
+    function saveRealtimeAdaptiveNoiseReductionConfig() {
+        AppState.realtimeAdaptiveNoiseReductionLevel =
+            root.normalizedAdaptiveNoiseReductionLevel(realtimeAdaptiveNoiseReductionConfigPopup.level)
+        AppState.realtimeAdaptiveNoiseReductionHighPassFilterEnabled =
+            realtimeAdaptiveNoiseReductionConfigPopup.highPassFilterEnabled
+        AppState.realtimeAdaptiveNoiseReductionAutomaticGainControlEnabled =
+            realtimeAdaptiveNoiseReductionConfigPopup.automaticGainControlEnabled
+        AppState.realtimeAdaptiveNoiseReductionTransientSuppressionEnabled =
+            realtimeAdaptiveNoiseReductionConfigPopup.transientSuppressionEnabled
+        realtimeAdaptiveNoiseReductionConfigPopup.close()
+    }
+
     Binding {
         target: signalPreprocessing
         property: "realtimeGain"
@@ -136,6 +167,7 @@ Item {
         anchors.fill: parent
         clip: true
         contentWidth: availableWidth
+        contentHeight: mainColumn.implicitHeight
         leftPadding: 30
         topPadding: 30
         rightPadding: 30
@@ -150,6 +182,7 @@ Item {
         }
 
         ColumnLayout {
+            id: mainColumn
             width: pageScrollView.availableWidth
             spacing: 28
 
@@ -687,6 +720,74 @@ Item {
                 }
             }
 
+            RowLayout {
+                id: realtimeAdaptiveNoiseReductionConfigAnchor
+
+                Layout.fillWidth: true
+                Layout.columnSpan: controlGrid.columns > 1 ? 2 : 1
+                Layout.preferredHeight: 40
+                spacing: 10
+
+                Text {
+                    text: qsTr("自适应降噪参数")
+                    font.pixelSize: 14
+                    color: Theme.textPrimary
+                }
+
+                Item {
+                    Layout.fillWidth: true
+                }
+
+                Button {
+                    id: realtimeAdaptiveNoiseReductionConfigButton
+
+                    Layout.preferredWidth: 96
+                    Layout.preferredHeight: 36
+                    hoverEnabled: true
+                    text: qsTr("配置")
+
+                    contentItem: Text {
+                        text: realtimeAdaptiveNoiseReductionConfigButton.text
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 14
+                        color: realtimeAdaptiveNoiseReductionConfigButton.enabled
+                            ? Theme.primary
+                            : root.colorWithAlpha(Theme.textPrimary, 0.38)
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    background: Rectangle {
+                        radius: 18
+                        border.width: 1
+                        border.color: realtimeAdaptiveNoiseReductionConfigButton.hovered
+                            || realtimeAdaptiveNoiseReductionConfigPopup.visible
+                            ? Theme.primary
+                            : root.selectOutlineColor
+                        color: realtimeAdaptiveNoiseReductionConfigButton.down
+                            ? root.colorWithAlpha(Theme.primary, 0.16)
+                            : (realtimeAdaptiveNoiseReductionConfigButton.hovered
+                                || realtimeAdaptiveNoiseReductionConfigPopup.visible
+                                ? root.colorWithAlpha(Theme.primary, 0.08)
+                                : "transparent")
+
+                        Behavior on border.color {
+                            ColorAnimation {
+                                duration: 150
+                            }
+                        }
+
+                        Behavior on color {
+                            ColorAnimation {
+                                duration: 150
+                            }
+                        }
+                    }
+
+                    onClicked: root.openRealtimeAdaptiveNoiseReductionConfig()
+                }
+            }
+
             ColumnLayout {
                 id: realtimeProcessingSection
 
@@ -811,6 +912,282 @@ Item {
 
             Item {
                 Layout.fillHeight: true
+            }
+        }
+    }
+
+    Popup {
+        id: realtimeAdaptiveNoiseReductionConfigPopup
+
+        property int level: 1
+        property bool highPassFilterEnabled: false
+        property bool automaticGainControlEnabled: false
+        property bool transientSuppressionEnabled: false
+
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.max(280, Math.min((parent ? parent.width : 640) - 60, 560))
+        modal: true
+        focus: true
+        padding: 0
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        enter: Transition {
+            ParallelAnimation {
+                NumberAnimation {
+                    target: realtimeAdaptiveNoiseReductionConfigPopup
+                    property: "opacity"
+                    from: 0
+                    to: 1
+                    duration: 120
+                    easing.type: Easing.OutQuad
+                }
+
+                NumberAnimation {
+                    target: realtimeAdaptiveNoiseReductionConfigPopup
+                    property: "scale"
+                    from: 0.94
+                    to: 1
+                    duration: 180
+                    easing.type: Easing.OutBack
+                }
+            }
+        }
+
+        exit: Transition {
+            ParallelAnimation {
+                NumberAnimation {
+                    target: realtimeAdaptiveNoiseReductionConfigPopup
+                    property: "opacity"
+                    from: 1
+                    to: 0
+                    duration: 100
+                    easing.type: Easing.InQuad
+                }
+
+                NumberAnimation {
+                    target: realtimeAdaptiveNoiseReductionConfigPopup
+                    property: "scale"
+                    from: 1
+                    to: 0.96
+                    duration: 100
+                    easing.type: Easing.InQuad
+                }
+            }
+        }
+
+        background: Rectangle {
+            radius: 24
+            color: Theme.textWhite
+            border.width: 1
+            border.color: Theme.border
+        }
+
+        contentItem: Item {
+            implicitHeight: popupColumn.implicitHeight + 44
+
+            ColumnLayout {
+                id: popupColumn
+                anchors.fill: parent
+                anchors.margins: 22
+                spacing: 16
+
+                Text {
+                    Layout.fillWidth: true
+                    text: qsTr("实时自适应降噪参数")
+                    color: Theme.textTitle
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 24
+                    font.bold: true
+                    wrapMode: Text.WordWrap
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 50
+                    spacing: 12
+
+                    Text {
+                        text: qsTr("降噪强度")
+                        color: Theme.textPrimary
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 15
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+
+                    Select {
+                        id: realtimeAdaptiveNoiseReductionLevelSelect
+
+                        Layout.preferredWidth: 180
+                        Layout.preferredHeight: 46
+                        currentIndex: realtimeAdaptiveNoiseReductionConfigPopup.level
+                        delegateHeight: 30
+                        visibleCount: 4
+                        popupPadding: 5
+                        showScrollIndicator: false
+                        textColor: Theme.textPrimary
+                        outlineColor: Theme.primaryBorder
+                        activeOutlineColor: Theme.primary
+                        indicatorColor: Theme.primary
+                        optionHighlightColor: root.colorWithAlpha(Theme.primary, 0.12)
+                        popupColor: Theme.textWhite
+                        popupBorderColor: Theme.primaryBorder
+                        model: ["Low", "Moderate", "High", "VeryHigh"]
+                        onCurrentIndexChanged: realtimeAdaptiveNoiseReductionConfigPopup.level =
+                            root.normalizedAdaptiveNoiseReductionLevel(currentIndex)
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 1
+                    color: root.colorWithAlpha(Theme.primary, 0.18)
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 38
+                        implicitHeight: 38
+
+                        MouseArea {
+                            anchors.fill: parent
+                            z: 1
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: realtimeAdaptiveNoiseReductionConfigPopup.highPassFilterEnabled =
+                                !realtimeAdaptiveNoiseReductionConfigPopup.highPassFilterEnabled
+                        }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            z: 0
+                            spacing: 12
+
+                            Text {
+                                text: qsTr("高通滤波")
+                                color: Theme.textPrimary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 15
+                            }
+
+                            Item {
+                                Layout.fillWidth: true
+                            }
+
+                            ToggleSwitch {
+                                checked: realtimeAdaptiveNoiseReductionConfigPopup.highPassFilterEnabled
+                                interactive: false
+                            }
+                        }
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 38
+                        implicitHeight: 38
+
+                        MouseArea {
+                            anchors.fill: parent
+                            z: 1
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: realtimeAdaptiveNoiseReductionConfigPopup.automaticGainControlEnabled =
+                                !realtimeAdaptiveNoiseReductionConfigPopup.automaticGainControlEnabled
+                        }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            z: 0
+                            spacing: 12
+
+                            Text {
+                                text: qsTr("自动增益控制")
+                                color: Theme.textPrimary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 15
+                            }
+
+                            Item {
+                                Layout.fillWidth: true
+                            }
+
+                            ToggleSwitch {
+                                checked: realtimeAdaptiveNoiseReductionConfigPopup.automaticGainControlEnabled
+                                interactive: false
+                            }
+                        }
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 38
+                        implicitHeight: 38
+
+                        MouseArea {
+                            anchors.fill: parent
+                            z: 1
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: realtimeAdaptiveNoiseReductionConfigPopup.transientSuppressionEnabled =
+                                !realtimeAdaptiveNoiseReductionConfigPopup.transientSuppressionEnabled
+                        }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            z: 0
+                            spacing: 12
+
+                            Text {
+                                text: qsTr("瞬态抑制")
+                                color: Theme.textPrimary
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 15
+                            }
+
+                            Item {
+                                Layout.fillWidth: true
+                            }
+
+                            ToggleSwitch {
+                                checked: realtimeAdaptiveNoiseReductionConfigPopup.transientSuppressionEnabled
+                                interactive: false
+                            }
+                        }
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+
+                    Button {
+                        text: qsTr("恢复默认")
+                        onClicked: {
+                            realtimeAdaptiveNoiseReductionConfigPopup.level = 1
+                            realtimeAdaptiveNoiseReductionConfigPopup.highPassFilterEnabled = false
+                            realtimeAdaptiveNoiseReductionConfigPopup.automaticGainControlEnabled = false
+                            realtimeAdaptiveNoiseReductionConfigPopup.transientSuppressionEnabled = false
+                        }
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+
+                    Button {
+                        text: qsTr("取消")
+                        onClicked: realtimeAdaptiveNoiseReductionConfigPopup.close()
+                    }
+
+                    Button {
+                        text: qsTr("保存")
+                        onClicked: root.saveRealtimeAdaptiveNoiseReductionConfig()
+                    }
+                }
             }
         }
     }

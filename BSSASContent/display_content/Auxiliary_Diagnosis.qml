@@ -1445,7 +1445,7 @@ Item {
 
     Popup {
         id: configPopup
-        parent: root
+        parent: Overlay.overlay
         anchors.centerIn: parent
         width: Math.min(root.width - 60, 540)
         modal: true

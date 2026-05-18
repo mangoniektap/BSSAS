@@ -38,6 +38,7 @@ struct SignalPreprocessOptions
     bool firFilterEnabled = false;                /**< FIR 滤波是否启用 */
     bool activeNoiseCancellationEnabled = true;   /**< 主动降噪 (ANC) 是否启用 */
     bool adaptiveNoiseReductionEnabled = true;    /**< 自适应降噪 (ANR) 是否启用 */
+    AdaptiveNoiseReduction::Parameters adaptiveNoiseReductionParameters;
     bool waveletEnabled = true;                   /**< 小波去噪是否启用 */
     bool transientNoiseSuppressionEnabled = true; /**< 瞬态噪声抑制是否启用 */
     bool motionArtifactReductionEnabled = true;   /**< 运动伪影削减是否启用 */
@@ -103,6 +104,7 @@ private:
     int m_realtimeDenoiseSampleRate = 0;                                                /**< 实时降噪采样率 */
     bool m_realtimeAncEnabled = true;                                                   /**< 实时 ANC 启用标志 */
     bool m_realtimeAdaptiveEnabled = true;                                              /**< 实时自适应降噪启用标志 */
+    AdaptiveNoiseReduction::Parameters m_realtimeAdaptiveParameters;
 };
 
 /** @brief 信号预处理管理器 (单例)，管理导入/实时两套预处理流水线的配置与线程调度。 */
@@ -145,6 +147,26 @@ class SignalPreprocessing : public QObject
         READ importAdaptiveNoiseReductionEnabled
         WRITE setImportAdaptiveNoiseReductionEnabled
         NOTIFY importAdaptiveNoiseReductionEnabledChanged)
+    Q_PROPERTY(
+        int importAdaptiveNoiseReductionLevel
+        READ importAdaptiveNoiseReductionLevel
+        WRITE setImportAdaptiveNoiseReductionLevel
+        NOTIFY importAdaptiveNoiseReductionParametersChanged)
+    Q_PROPERTY(
+        bool importAdaptiveNoiseReductionHighPassFilterEnabled
+        READ importAdaptiveNoiseReductionHighPassFilterEnabled
+        WRITE setImportAdaptiveNoiseReductionHighPassFilterEnabled
+        NOTIFY importAdaptiveNoiseReductionParametersChanged)
+    Q_PROPERTY(
+        bool importAdaptiveNoiseReductionAutomaticGainControlEnabled
+        READ importAdaptiveNoiseReductionAutomaticGainControlEnabled
+        WRITE setImportAdaptiveNoiseReductionAutomaticGainControlEnabled
+        NOTIFY importAdaptiveNoiseReductionParametersChanged)
+    Q_PROPERTY(
+        bool importAdaptiveNoiseReductionTransientSuppressionEnabled
+        READ importAdaptiveNoiseReductionTransientSuppressionEnabled
+        WRITE setImportAdaptiveNoiseReductionTransientSuppressionEnabled
+        NOTIFY importAdaptiveNoiseReductionParametersChanged)
     /** @brief 导入模式小波去噪是否启用 */
     Q_PROPERTY(
         bool importWaveletDenoisingEnabled
@@ -204,6 +226,26 @@ class SignalPreprocessing : public QObject
         READ realtimeAdaptiveNoiseReductionEnabled
         WRITE setRealtimeAdaptiveNoiseReductionEnabled
         NOTIFY realtimeAdaptiveNoiseReductionEnabledChanged)
+    Q_PROPERTY(
+        int realtimeAdaptiveNoiseReductionLevel
+        READ realtimeAdaptiveNoiseReductionLevel
+        WRITE setRealtimeAdaptiveNoiseReductionLevel
+        NOTIFY realtimeAdaptiveNoiseReductionParametersChanged)
+    Q_PROPERTY(
+        bool realtimeAdaptiveNoiseReductionHighPassFilterEnabled
+        READ realtimeAdaptiveNoiseReductionHighPassFilterEnabled
+        WRITE setRealtimeAdaptiveNoiseReductionHighPassFilterEnabled
+        NOTIFY realtimeAdaptiveNoiseReductionParametersChanged)
+    Q_PROPERTY(
+        bool realtimeAdaptiveNoiseReductionAutomaticGainControlEnabled
+        READ realtimeAdaptiveNoiseReductionAutomaticGainControlEnabled
+        WRITE setRealtimeAdaptiveNoiseReductionAutomaticGainControlEnabled
+        NOTIFY realtimeAdaptiveNoiseReductionParametersChanged)
+    Q_PROPERTY(
+        bool realtimeAdaptiveNoiseReductionTransientSuppressionEnabled
+        READ realtimeAdaptiveNoiseReductionTransientSuppressionEnabled
+        WRITE setRealtimeAdaptiveNoiseReductionTransientSuppressionEnabled
+        NOTIFY realtimeAdaptiveNoiseReductionParametersChanged)
     /** @brief 实时模式小波去噪是否启用 */
     Q_PROPERTY(
         bool realtimeWaveletDenoisingEnabled
@@ -265,6 +307,10 @@ public:
     bool importNotchEnabled() const;
     int importNotchFrequencyMode() const;
     bool importAdaptiveNoiseReductionEnabled() const;
+    int importAdaptiveNoiseReductionLevel() const;
+    bool importAdaptiveNoiseReductionHighPassFilterEnabled() const;
+    bool importAdaptiveNoiseReductionAutomaticGainControlEnabled() const;
+    bool importAdaptiveNoiseReductionTransientSuppressionEnabled() const;
     bool importWaveletDenoisingEnabled() const;
     bool importTransientNoiseSuppressionEnabled() const;
     bool importMotionArtifactReductionEnabled() const;
@@ -276,6 +322,10 @@ public:
     int realtimeNotchFrequencyMode() const;
     bool realtimeActiveNoiseCancellationEnabled() const;
     bool realtimeAdaptiveNoiseReductionEnabled() const;
+    int realtimeAdaptiveNoiseReductionLevel() const;
+    bool realtimeAdaptiveNoiseReductionHighPassFilterEnabled() const;
+    bool realtimeAdaptiveNoiseReductionAutomaticGainControlEnabled() const;
+    bool realtimeAdaptiveNoiseReductionTransientSuppressionEnabled() const;
     bool realtimeWaveletDenoisingEnabled() const;
     bool realtimeTransientNoiseSuppressionEnabled() const;
     bool realtimeMotionArtifactReductionEnabled() const;
@@ -296,6 +346,10 @@ public:
     void setImportNotchFrequencyMode(int mode);
     /** @brief 设置导入模式自适应降噪 @param enabled 是否启用 */
     void setImportAdaptiveNoiseReductionEnabled(bool enabled);
+    void setImportAdaptiveNoiseReductionLevel(int level);
+    void setImportAdaptiveNoiseReductionHighPassFilterEnabled(bool enabled);
+    void setImportAdaptiveNoiseReductionAutomaticGainControlEnabled(bool enabled);
+    void setImportAdaptiveNoiseReductionTransientSuppressionEnabled(bool enabled);
     /** @brief 设置导入模式小波去噪 @param enabled 是否启用 */
     void setImportWaveletDenoisingEnabled(bool enabled);
     /** @brief 设置导入模式瞬态噪声抑制 @param enabled 是否启用 */
@@ -314,6 +368,10 @@ public:
     void setRealtimeActiveNoiseCancellationEnabled(bool enabled);
     /** @brief 设置实时模式自适应降噪 @param enabled 是否启用 */
     void setRealtimeAdaptiveNoiseReductionEnabled(bool enabled);
+    void setRealtimeAdaptiveNoiseReductionLevel(int level);
+    void setRealtimeAdaptiveNoiseReductionHighPassFilterEnabled(bool enabled);
+    void setRealtimeAdaptiveNoiseReductionAutomaticGainControlEnabled(bool enabled);
+    void setRealtimeAdaptiveNoiseReductionTransientSuppressionEnabled(bool enabled);
     /** @brief 设置实时模式小波去噪 @param enabled 是否启用 */
     void setRealtimeWaveletDenoisingEnabled(bool enabled);
     /** @brief 设置实时模式瞬态噪声抑制 @param enabled 是否启用 */
@@ -361,6 +419,7 @@ private:
     bool m_importNotchEnabled = true;                        /**< 导入: 陷波滤波开关 */
     int m_importNotchFrequencyMode = NotchFrequencyFixed;    /**< 导入: 陷波中心频率模式 */
     bool m_importAdaptiveNoiseReductionEnabled = true;       /**< 导入: 自适应降噪开关 */
+    AdaptiveNoiseReduction::Parameters m_importAdaptiveNoiseReductionParameters;
     bool m_importWaveletDenoisingEnabled = true;             /**< 导入: 小波去噪开关 */
     bool m_importTransientNoiseSuppressionEnabled = true;    /**< 导入: 瞬态噪声抑制开关 */
     bool m_importMotionArtifactReductionEnabled = true;      /**< 导入: 运动伪影削减开关 */
@@ -370,6 +429,7 @@ private:
     int m_realtimeNotchFrequencyMode = NotchFrequencyFixed;  /**< 实时: 陷波中心频率模式 */
     bool m_realtimeActiveNoiseCancellationEnabled = true;    /**< 实时: 主动降噪开关 */
     bool m_realtimeAdaptiveNoiseReductionEnabled = true;     /**< 实时: 自适应降噪开关 */
+    AdaptiveNoiseReduction::Parameters m_realtimeAdaptiveNoiseReductionParameters;
     bool m_realtimeWaveletDenoisingEnabled = true;           /**< 实时: 小波去噪开关 */
     bool m_realtimeTransientNoiseSuppressionEnabled = true;  /**< 实时: 瞬态噪声抑制开关 */
     bool m_realtimeMotionArtifactReductionEnabled = true;    /**< 实时: 运动伪影削减开关 */
@@ -389,6 +449,7 @@ signals:
     void importNotchFrequencyModeChanged();
     /** @brief 导入自适应降噪开关变化信号 */
     void importAdaptiveNoiseReductionEnabledChanged();
+    void importAdaptiveNoiseReductionParametersChanged();
     /** @brief 导入小波去噪开关变化信号 */
     void importWaveletDenoisingEnabledChanged();
     /** @brief 导入瞬态噪声抑制开关变化信号 */
@@ -409,6 +470,7 @@ signals:
     void realtimeActiveNoiseCancellationEnabledChanged();
     /** @brief 实时自适应降噪开关变化信号 */
     void realtimeAdaptiveNoiseReductionEnabledChanged();
+    void realtimeAdaptiveNoiseReductionParametersChanged();
     /** @brief 实时小波去噪开关变化信号 */
     void realtimeWaveletDenoisingEnabledChanged();
     /** @brief 实时瞬态噪声抑制开关变化信号 */

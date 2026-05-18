@@ -65,6 +65,54 @@ Window {
         value: AppState.normalizedAnalysisTimeLength(AppState.importAnalysisTimeLength)
     }
 
+    Binding {
+        target: signalPreprocessing
+        property: "importAdaptiveNoiseReductionLevel"
+        value: AppState.importAdaptiveNoiseReductionLevel
+    }
+
+    Binding {
+        target: signalPreprocessing
+        property: "importAdaptiveNoiseReductionHighPassFilterEnabled"
+        value: AppState.importAdaptiveNoiseReductionHighPassFilterEnabled
+    }
+
+    Binding {
+        target: signalPreprocessing
+        property: "importAdaptiveNoiseReductionAutomaticGainControlEnabled"
+        value: AppState.importAdaptiveNoiseReductionAutomaticGainControlEnabled
+    }
+
+    Binding {
+        target: signalPreprocessing
+        property: "importAdaptiveNoiseReductionTransientSuppressionEnabled"
+        value: AppState.importAdaptiveNoiseReductionTransientSuppressionEnabled
+    }
+
+    Binding {
+        target: signalPreprocessing
+        property: "realtimeAdaptiveNoiseReductionLevel"
+        value: AppState.realtimeAdaptiveNoiseReductionLevel
+    }
+
+    Binding {
+        target: signalPreprocessing
+        property: "realtimeAdaptiveNoiseReductionHighPassFilterEnabled"
+        value: AppState.realtimeAdaptiveNoiseReductionHighPassFilterEnabled
+    }
+
+    Binding {
+        target: signalPreprocessing
+        property: "realtimeAdaptiveNoiseReductionAutomaticGainControlEnabled"
+        value: AppState.realtimeAdaptiveNoiseReductionAutomaticGainControlEnabled
+    }
+
+    Binding {
+        target: signalPreprocessing
+        property: "realtimeAdaptiveNoiseReductionTransientSuppressionEnabled"
+        value: AppState.realtimeAdaptiveNoiseReductionTransientSuppressionEnabled
+    }
+
     Component.onCompleted: Qt.callLater(function() {
         updateManager.checkForUpdatesOnStartup()
     })
