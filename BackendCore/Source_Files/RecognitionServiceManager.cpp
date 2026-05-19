@@ -6,6 +6,7 @@
 #include "RecognitionServiceManager.h"
 
 #include <QCoreApplication>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QHttpMultiPart>
@@ -15,8 +16,10 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QSaveFile>
 #include <QUrl>
 #include <QUrlQuery>
+#include <QVariant>
 
 namespace {
 
@@ -24,6 +27,153 @@ constexpr char kApiKeyHeaderName[] = "X-API-Key";
 QString trimmedOrEmpty(const QString& value)
 {
     return value.trimmed();
+}
+
+bool isMapValue(const QVariant& value)
+{
+    return value.metaType().id() == QMetaType::QVariantMap;
+}
+
+bool isListValue(const QVariant& value)
+{
+    return value.metaType().id() == QMetaType::QVariantList ||
+        value.metaType().id() == QMetaType::QStringList;
+}
+
+bool hasUsableValue(const QVariant& value)
+{
+    if (!value.isValid() || value.isNull()) {
+        return false;
+    }
+    if (isMapValue(value)) {
+        return !value.toMap().isEmpty();
+    }
+    if (isListValue(value)) {
+        return !value.toList().isEmpty();
+    }
+    return !value.toString().trimmed().isEmpty();
+}
+
+QString firstTextValue(
+    const QVariantMap& object,
+    const QStringList& keys)
+{
+    for (const QString& key : keys) {
+        const QString value = object.value(key).toString().trimmed();
+        if (!value.isEmpty()) {
+            return value;
+        }
+    }
+
+    return {};
+}
+
+bool codeIndicatesSuccess(int code)
+{
+    return code == 0 || code == 200;
+}
+
+bool parseCodeValue(const QVariant& value, int* code)
+{
+    if (!hasUsableValue(value) || code == nullptr) {
+        return false;
+    }
+
+    if (value.metaType().id() == QMetaType::Bool) {
+        *code = value.toBool() ? 0 : 1;
+        return true;
+    }
+
+    bool ok = false;
+    const int numericCode = value.toInt(&ok);
+    if (ok) {
+        *code = numericCode;
+        return true;
+    }
+
+    const QString text = value.toString().trimmed().toLower();
+    if (text == QStringLiteral("ok") ||
+        text == QStringLiteral("success") ||
+        text == QStringLiteral("successful")) {
+        *code = 0;
+        return true;
+    }
+    if (text == QStringLiteral("error") ||
+        text == QStringLiteral("failed") ||
+        text == QStringLiteral("failure")) {
+        *code = 1;
+        return true;
+    }
+
+    return false;
+}
+
+QVariant firstPayloadValue(
+    const QVariantMap& object,
+    const QStringList& keys)
+{
+    for (const QString& key : keys) {
+        const QVariant value = object.value(key);
+        if (hasUsableValue(value)) {
+            return value;
+        }
+    }
+
+    return {};
+}
+
+QVariant firstStructuredPayloadValue(
+    const QVariantMap& object,
+    const QStringList& keys)
+{
+    for (const QString& key : keys) {
+        const QVariant value = object.value(key);
+        if (hasUsableValue(value) && (isMapValue(value) || isListValue(value))) {
+            return value;
+        }
+    }
+
+    return {};
+}
+
+QVariantMap resultMapFromValue(const QVariant& value)
+{
+    if (!hasUsableValue(value)) {
+        return {};
+    }
+    if (isMapValue(value)) {
+        return value.toMap();
+    }
+    if (isListValue(value)) {
+        return QVariantMap {
+            { QStringLiteral("items"), value.toList() },
+        };
+    }
+
+    return QVariantMap {
+        { QStringLiteral("value"), value },
+    };
+}
+
+QVariantMap rootObjectAsResult(QVariantMap rootObject)
+{
+    static const QStringList wrapperKeys = {
+        QStringLiteral("code"),
+        QStringLiteral("status_code"),
+        QStringLiteral("success"),
+        QStringLiteral("message"),
+        QStringLiteral("msg"),
+        QStringLiteral("detail"),
+        QStringLiteral("error"),
+        QStringLiteral("request_id"),
+        QStringLiteral("requestId"),
+    };
+
+    for (const QString& key : wrapperKeys) {
+        rootObject.remove(key);
+    }
+
+    return rootObject;
 }
 
 QString describeHttpStatus(QNetworkReply* reply)
@@ -109,6 +259,73 @@ QString RecognitionServiceManager::rawResponseJson() const
 QString RecognitionServiceManager::lastRequestId() const
 {
     return m_lastRequestId;
+}
+
+QString RecognitionServiceManager::saveRecognitionResultJson(
+    const QString& filePath) const
+{
+    QString outputPath = trimmedOrEmpty(filePath);
+    if (outputPath.isEmpty()) {
+        return QStringLiteral("请选择 JSON 保存位置。");
+    }
+
+    const QUrl outputUrl(outputPath);
+    if (outputUrl.isLocalFile()) {
+        outputPath = outputUrl.toLocalFile();
+    }
+    if (!outputPath.endsWith(QStringLiteral(".json"), Qt::CaseInsensitive)) {
+        outputPath += QStringLiteral(".json");
+    }
+
+    const QFileInfo outputFileInfo(outputPath);
+    if (outputFileInfo.exists() && outputFileInfo.isDir()) {
+        return QStringLiteral("保存路径不能是文件夹。");
+    }
+
+    const QDir outputDirectory = outputFileInfo.absoluteDir();
+    if (!outputDirectory.exists() && !outputDirectory.mkpath(QStringLiteral("."))) {
+        return QStringLiteral("无法创建保存目录: %1")
+            .arg(outputDirectory.absolutePath());
+    }
+
+    QByteArray bytes;
+    const QString rawJson = m_rawResponseJson.trimmed();
+    if (!rawJson.isEmpty()) {
+        QJsonParseError parseError;
+        const QJsonDocument document =
+            QJsonDocument::fromJson(rawJson.toUtf8(), &parseError);
+        bytes =
+            parseError.error == QJsonParseError::NoError
+                ? document.toJson(QJsonDocument::Indented)
+                : rawJson.toUtf8();
+    }
+
+    if (bytes.trimmed().isEmpty() && !m_result.isEmpty()) {
+        bytes = QJsonDocument::fromVariant(m_result).toJson(QJsonDocument::Indented);
+    }
+
+    if (bytes.trimmed().isEmpty()) {
+        return QStringLiteral("当前没有可保存的识别结果。");
+    }
+    if (!bytes.endsWith('\n')) {
+        bytes.append('\n');
+    }
+
+    QSaveFile outputFile(outputFileInfo.absoluteFilePath());
+    if (!outputFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        return QStringLiteral("无法打开 JSON 文件: %1").arg(outputFile.errorString());
+    }
+
+    if (outputFile.write(bytes) != bytes.size()) {
+        return QStringLiteral("无法完整写入 JSON 文件: %1")
+            .arg(outputFile.errorString());
+    }
+
+    if (!outputFile.commit()) {
+        return QStringLiteral("保存 JSON 文件失败: %1").arg(outputFile.errorString());
+    }
+
+    return {};
 }
 
 /**
@@ -253,19 +470,19 @@ void RecognitionServiceManager::recognizeFile(
             return;
         }
 
-        if (!parsedResponse.hasCode) {
-            reply->deleteLater();
-            finishWithError(QStringLiteral("识别服务响应缺少 code 字段。"));
-            return;
-        }
-
-        if (parsedResponse.code != 0) {
+        if (parsedResponse.hasCode && !codeIndicatesSuccess(parsedResponse.code)) {
             const QString errorMessage =
                 parsedResponse.message.isEmpty()
                     ? QStringLiteral("识别服务返回了错误。")
                     : parsedResponse.message;
             reply->deleteLater();
             finishWithError(errorMessage);
+            return;
+        }
+
+        if (parsedResponse.dataObject.isEmpty()) {
+            reply->deleteLater();
+            finishWithError(QStringLiteral("识别服务未返回可显示的结果数据。"));
             return;
         }
 
@@ -455,26 +672,62 @@ RecognitionServiceManager::ParsedResponse RecognitionServiceManager::parseRespon
 
     QJsonParseError jsonParseError;
     const QJsonDocument document = QJsonDocument::fromJson(payload, &jsonParseError);
-    if (jsonParseError.error != QJsonParseError::NoError || !document.isObject()) {
+    if (jsonParseError.error != QJsonParseError::NoError) {
         return parsedResponse;
     }
 
     parsedResponse.jsonParsed = true;
-    parsedResponse.rootObject = document.object().toVariantMap();
-    parsedResponse.message =
-        parsedResponse.rootObject.value(QStringLiteral("message")).toString().trimmed();
-    parsedResponse.requestId =
-        parsedResponse.rootObject.value(QStringLiteral("request_id")).toString().trimmed();
-
-    const QVariant codeValue = parsedResponse.rootObject.value(QStringLiteral("code"));
-    if (codeValue.isValid()) {
-        parsedResponse.hasCode = true;
-        parsedResponse.code = codeValue.toInt();
+    if (!document.isObject()) {
+        parsedResponse.dataObject = resultMapFromValue(document.toVariant());
+        return parsedResponse;
     }
 
-    const QVariant dataValue = parsedResponse.rootObject.value(QStringLiteral("data"));
-    if (dataValue.metaType().id() == QMetaType::QVariantMap) {
-        parsedResponse.dataObject = dataValue.toMap();
+    parsedResponse.rootObject = document.object().toVariantMap();
+    parsedResponse.message = firstTextValue(
+        parsedResponse.rootObject,
+        {
+            QStringLiteral("message"),
+            QStringLiteral("msg"),
+            QStringLiteral("detail"),
+            QStringLiteral("error"),
+        });
+    parsedResponse.requestId = firstTextValue(
+        parsedResponse.rootObject,
+        {
+            QStringLiteral("request_id"),
+            QStringLiteral("requestId"),
+        });
+
+    const QVariant codeValue = firstPayloadValue(
+        parsedResponse.rootObject,
+        {
+            QStringLiteral("code"),
+            QStringLiteral("status_code"),
+            QStringLiteral("success"),
+        });
+    int parsedCode = 0;
+    if (parseCodeValue(codeValue, &parsedCode)) {
+        parsedResponse.hasCode = true;
+        parsedResponse.code = parsedCode;
+    }
+
+    QVariant dataValue = firstPayloadValue(
+        parsedResponse.rootObject,
+        {
+            QStringLiteral("data"),
+            QStringLiteral("payload"),
+            QStringLiteral("response"),
+        });
+    if (!hasUsableValue(dataValue)) {
+        dataValue = firstStructuredPayloadValue(
+            parsedResponse.rootObject,
+            {
+                QStringLiteral("result"),
+            });
+    }
+    parsedResponse.dataObject = resultMapFromValue(dataValue);
+    if (parsedResponse.dataObject.isEmpty()) {
+        parsedResponse.dataObject = rootObjectAsResult(parsedResponse.rootObject);
     }
 
     return parsedResponse;

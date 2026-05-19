@@ -17,8 +17,8 @@ Item {
     clip: true
 
     property bool pageActive: true
-    property bool verbose: false
-    property bool includeProbs: false
+    property bool verbose: true
+    property bool includeProbs: true
     property string selectedUploadFilePath: ""
     property string lastRequestedFilePath: ""
     property bool recognitionBusy: false
@@ -33,6 +33,10 @@ Item {
     property string currentModelKey: "hubert"
     property string lastRequestedModelKey: "hubert"
 
+    readonly property int resultHeadingFontSize: 18
+    readonly property int resultBodyFontSize: 17
+    readonly property int resultMetaFontSize: 14
+    readonly property int resultJsonFontSize: 14
     readonly property string fixedDisplayText: "肠鸣音识别"
     readonly property string assetBase: "qrc:/qt/qml/BSSASContent/image resources/auxiliary diagnosis/"
     readonly property bool compactLayout: width < 980
@@ -51,6 +55,12 @@ Item {
     readonly property string recognitionServiceHostPortExample: "127.0.0.1:8000"
     readonly property bool serviceConfigured: AppState.recognitionServiceHostPort.trim().length > 0
         && AppState.recognitionApiKey.trim().length > 0
+    readonly property var detailedEventItems: root.buildDetailedEventItems()
+    readonly property int detailedEventCount: root.detailedEventItems.length
+    readonly property bool recognitionWaitingForResult: root.recognitionBusy &&
+        root.recognitionErrorMessage.length === 0 &&
+        root.recognitionTotalUploadBytes > 0 &&
+        root.recognitionUploadedBytes >= root.recognitionTotalUploadBytes
     readonly property var workflowSteps: [
         {
             title: "上传文件",
@@ -76,6 +86,28 @@ Item {
             title: "生成建议",
             subtitle: "输出诊断建议",
             icon: root.asset("diagnosis_advice_step_icon.svg")
+        }
+    ]
+    readonly property var resultKeywordGroups: [
+        {
+            color: "#EF4444",
+            keywords: ["异常", "阳性", "高危", "风险", "严重", "急性", "告警", "错误", "失败"]
+        },
+        {
+            color: "#FF8A1F",
+            keywords: ["偏高", "偏低", "疑似", "轻度", "中度", "观察", "建议", "复核", "注意"]
+        },
+        {
+            color: "#19B97B",
+            keywords: ["正常", "阴性", "稳定", "低风险", "完成", "良好", "通过"]
+        },
+        {
+            color: "#2A78B8",
+            keywords: ["肠鸣音", "识别", "置信度", "概率", "模型", "HuBERT", "Wav2Vec", "WAV"]
+        },
+        {
+            color: "#7A55D9",
+            keywords: ["餐后", "空腹", "术后", "频率", "时长", "事件", "特征", "推理"]
         }
     ]
 
@@ -279,7 +311,7 @@ Item {
         property color stateColor: Theme.textMuted
 
         Layout.fillWidth: true
-        Layout.preferredHeight: Math.max(78, Math.min(92, root.height * 0.095))
+        Layout.preferredHeight: Math.max(84, Math.min(104, root.height * 0.105))
         radius: 14
         color: Theme.textWhite
         border.width: 1
@@ -309,7 +341,7 @@ Item {
                     text: summaryItem.title
                     color: Theme.textMuted
                     font.family: Theme.fontFamily
-                    font.pixelSize: 13
+                    font.pixelSize: 14
                     elide: Text.ElideRight
                     renderType: Text.NativeRendering
                 }
@@ -319,7 +351,7 @@ Item {
                     text: summaryItem.value
                     color: Theme.textTitle
                     font.family: summaryItem.value === "--" ? Theme.numberFontFamily : Theme.fontFamily
-                    font.pixelSize: summaryItem.value.length > 24 ? 15 : 18
+                    font.pixelSize: summaryItem.value.length > 24 ? 16 : 20
                     font.bold: true
                     maximumLineCount: 2
                     wrapMode: Text.WordWrap
@@ -334,7 +366,7 @@ Item {
                 text: summaryItem.stateText
                 color: summaryItem.stateColor
                 font.family: Theme.fontFamily
-                font.pixelSize: 13
+                font.pixelSize: 14
                 elide: Text.ElideRight
                 renderType: Text.NativeRendering
             }
@@ -474,12 +506,367 @@ Item {
 
     function formatPercent(value) {
         const numberValue = Number(value)
-        return isFinite(numberValue) ? (numberValue * 100).toFixed(2) + "%" : "--"
+        if (!isFinite(numberValue)) {
+            const percentText = String(value || "").trim()
+            if (percentText.endsWith("%")) {
+                const parsedPercent = Number(percentText.slice(0, -1))
+                return isFinite(parsedPercent) ? parsedPercent.toFixed(2) + "%" : "--"
+            }
+            return "--"
+        }
+
+        const normalizedValue = numberValue > 1 ? numberValue / 100.0 : numberValue
+        return (normalizedValue * 100).toFixed(2) + "%"
     }
 
     function formatInt(value) {
         const numberValue = Number(value)
         return isFinite(numberValue) ? String(Math.round(numberValue)) : "--"
+    }
+
+    function isPlainObject(value) {
+        return value !== null && value !== undefined && typeof value === "object" && !Array.isArray(value)
+    }
+
+    function normalizeObject(value) {
+        if (root.isPlainObject(value)) {
+            return value
+        }
+        if (value === null || value === undefined || String(value).trim().length === 0) {
+            return ({})
+        }
+        return ({ value: value })
+    }
+
+    function normalizedResultValue(value) {
+        let result = root.normalizeObject(value)
+        const wrapperKeys = ["data", "result", "payload", "response"]
+        for (let depth = 0; depth < 4; depth += 1) {
+            let unwrapped = false
+            for (let index = 0; index < wrapperKeys.length; index += 1) {
+                const key = wrapperKeys[index]
+                if (root.isPlainObject(result[key])) {
+                    result = result[key]
+                    unwrapped = true
+                    break
+                }
+            }
+            if (!unwrapped) {
+                break
+            }
+        }
+        return result
+    }
+
+    function displayText(value, fallback) {
+        if (value === null || value === undefined) {
+            return fallback || ""
+        }
+        if (Array.isArray(value)) {
+            return value.length > 0 ? JSON.stringify(value) : (fallback || "")
+        }
+        if (typeof value === "object") {
+            const keys = Object.keys(value)
+            return keys.length > 0 ? JSON.stringify(value) : (fallback || "")
+        }
+
+        const text = String(value).trim()
+        return text.length > 0 ? text : (fallback || "")
+    }
+
+    function firstDisplayText(objectValue, keys) {
+        const object = root.normalizeObject(objectValue)
+        for (let index = 0; index < keys.length; index += 1) {
+            const key = keys[index]
+            if (object[key] !== undefined && object[key] !== null) {
+                const text = root.displayText(object[key], "")
+                if (text.length > 0) {
+                    return text
+                }
+            }
+        }
+        return ""
+    }
+
+    function firstNumericValue(objectValue, keys) {
+        const object = root.normalizeObject(objectValue)
+        for (let index = 0; index < keys.length; index += 1) {
+            const key = keys[index]
+            if (object[key] === undefined || object[key] === null) {
+                continue
+            }
+            const rawText = String(object[key]).trim()
+            const numberValue = Number(rawText.endsWith("%") ? rawText.slice(0, -1) : rawText)
+            if (isFinite(numberValue)) {
+                return rawText.endsWith("%") ? numberValue / 100.0 : numberValue
+            }
+        }
+        return NaN
+    }
+
+    function firstArrayValue(objectValue, keys) {
+        if (Array.isArray(objectValue)) {
+            return objectValue
+        }
+
+        const object = root.normalizeObject(objectValue)
+        for (let index = 0; index < keys.length; index += 1) {
+            const key = keys[index]
+            const value = object[key]
+            if (Array.isArray(value) && value.length > 0) {
+                return value
+            }
+            if (root.isPlainObject(value)) {
+                const nestedValue = root.firstArrayValue(value, keys)
+                if (nestedValue.length > 0) {
+                    return nestedValue
+                }
+            }
+        }
+
+        return []
+    }
+
+    function firstSecondsValue(objectValue, secondKeys, millisecondKeys) {
+        const seconds = root.firstNumericValue(objectValue, secondKeys)
+        if (isFinite(seconds)) {
+            return seconds
+        }
+
+        const milliseconds = root.firstNumericValue(objectValue, millisecondKeys)
+        return isFinite(milliseconds) ? milliseconds / 1000.0 : NaN
+    }
+
+    function recognitionEventArray() {
+        const result = root.resultObject()
+        const summary = root.summaryObject()
+        const windowAnalysis = root.windowAnalysisObject()
+        const eventKeys = [
+            "events",
+            "event_results",
+            "eventResults",
+            "event_details",
+            "eventDetails",
+            "recognized_events",
+            "recognizedEvents",
+            "recognized_segments",
+            "recognizedSegments",
+            "stitched_events",
+            "stitchedEvents",
+            "segments",
+            "timeline",
+            "items",
+            "predictions",
+            "results"
+        ]
+        const candidates = [
+            result,
+            summary,
+            windowAnalysis,
+            result.details,
+            result.detail,
+            result.analysis,
+            result.output,
+            result.verbose,
+            result.timeline,
+            summary.timeline,
+            windowAnalysis.timeline
+        ]
+
+        for (let index = 0; index < candidates.length; index += 1) {
+            const events = root.firstArrayValue(candidates[index], eventKeys)
+            if (events.length > 0) {
+                return events
+            }
+        }
+
+        return []
+    }
+
+    function buildDetailedEventItems() {
+        const events = root.recognitionEventArray()
+        const items = []
+        for (let index = 0; index < events.length; index += 1) {
+            if (events[index] !== undefined && events[index] !== null) {
+                items.push({ sequence: index + 1, event: events[index] })
+            }
+        }
+        return items
+    }
+
+    function eventIndexText(sequence) {
+        const text = String(sequence)
+        return "#" + "000".slice(0, Math.max(0, 3 - text.length)) + text
+    }
+
+    function eventLabelText(eventValue) {
+        const label = root.firstDisplayText(
+            eventValue,
+            [
+                "class_name",
+                "className",
+                "event_class",
+                "eventClass",
+                "predicted_class_name",
+                "predictedClassName",
+                "label_name",
+                "labelName",
+                "label",
+                "class",
+                "category",
+                "prediction",
+                "result",
+                "type",
+                "name"
+            ])
+        return label.length > 0 ? label : "事件"
+    }
+
+    function eventTimeRangeText(eventValue) {
+        const start = root.firstSecondsValue(
+            eventValue,
+            ["start_sec", "start_seconds", "start_s", "startSec", "startSeconds", "start_time", "startTime", "onset", "onset_sec", "begin", "t0"],
+            ["start_ms", "startMilliseconds", "startTimeMs", "onset_ms", "begin_ms"])
+        const end = root.firstSecondsValue(
+            eventValue,
+            ["end_sec", "end_seconds", "end_s", "endSec", "endSeconds", "end_time", "endTime", "offset", "offset_sec", "finish", "t1"],
+            ["end_ms", "endMilliseconds", "endTimeMs", "offset_ms", "finish_ms"])
+
+        if (isFinite(start) && isFinite(end)) {
+            return start.toFixed(2) + "-" + end.toFixed(2) + " s"
+        }
+        if (isFinite(start)) {
+            return "起始 " + start.toFixed(2) + " s"
+        }
+        if (isFinite(end)) {
+            return "结束 " + end.toFixed(2) + " s"
+        }
+        return ""
+    }
+
+    function eventDurationText(eventValue) {
+        const duration = root.firstSecondsValue(
+            eventValue,
+            ["duration_sec", "duration_seconds", "duration_s", "durationSec", "durationSeconds", "length_sec", "lengthSeconds"],
+            ["duration_ms", "durationMilliseconds", "length_ms", "lengthMilliseconds"])
+        return isFinite(duration) ? duration.toFixed(2) + " s" : ""
+    }
+
+    function eventConfidenceText(eventValue) {
+        const confidence = root.firstNumericValue(
+            eventValue,
+            [
+                "confidence",
+                "confidence_score",
+                "confidenceScore",
+                "probability",
+                "prob",
+                "score",
+                "predict_prob",
+                "predictProb",
+                "predicted_probability",
+                "predictedProbability"
+            ])
+        return isFinite(confidence) ? root.formatPercent(confidence) : ""
+    }
+
+    function eventMetaText(eventValue) {
+        const parts = []
+        const timeRange = root.eventTimeRangeText(eventValue)
+        const confidence = root.eventConfidenceText(eventValue)
+        const duration = root.eventDurationText(eventValue)
+        if (timeRange.length > 0) {
+            parts.push("时间 " + timeRange)
+        }
+        if (duration.length > 0) {
+            parts.push("时长 " + duration)
+        }
+        if (confidence.length > 0) {
+            parts.push("置信度 " + confidence)
+        }
+        return parts.length > 0 ? parts.join("  |  ") : "完整事件结果"
+    }
+
+    function prettyJsonText(value) {
+        if (value === null || value === undefined) {
+            return ""
+        }
+        if (typeof value === "string") {
+            return value.trim()
+        }
+
+        try {
+            return JSON.stringify(value, null, 2)
+        } catch (error) {
+            return root.displayText(value, "")
+        }
+    }
+
+    function cssColor(colorValue, alpha) {
+        const color = Qt.color(colorValue)
+        const resolvedAlpha = alpha === undefined ? color.a : alpha
+        return "rgba("
+            + Math.round(color.r * 255) + ", "
+            + Math.round(color.g * 255) + ", "
+            + Math.round(color.b * 255) + ", "
+            + resolvedAlpha + ")"
+    }
+
+    function escapeRegExp(value) {
+        return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    }
+
+    function escapeRichText(value) {
+        return root.displayText(value, "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;")
+    }
+
+    function highlightedResultText(value) {
+        let richText = root.escapeRichText(value)
+        if (richText.length === 0) {
+            return ""
+        }
+
+        const colorByKeyword = ({})
+        const keywords = []
+        for (let groupIndex = 0; groupIndex < root.resultKeywordGroups.length; groupIndex += 1) {
+            const group = root.resultKeywordGroups[groupIndex]
+            for (let keywordIndex = 0; keywordIndex < group.keywords.length; keywordIndex += 1) {
+                const keyword = root.escapeRichText(group.keywords[keywordIndex])
+                if (keyword.length === 0) {
+                    continue
+                }
+                colorByKeyword[keyword.toLowerCase()] = group.color
+                keywords.push(keyword)
+            }
+        }
+
+        keywords.sort(function(left, right) { return right.length - left.length })
+        if (keywords.length > 0) {
+            const pattern = new RegExp("(" + keywords.map(root.escapeRegExp).join("|") + ")", "gi")
+            richText = richText.replace(pattern, function(match) {
+                const color = colorByKeyword[String(match).toLowerCase()] || "#2A78B8"
+                return "<span style=\"color:" + color + "; font-weight:700;\">" + match + "</span>"
+            })
+        }
+
+        return richText.replace(/\r?\n/g, "<br>")
+    }
+
+    function resultSummaryDisplayText() {
+        return root.summaryText()
+            || root.compactResultText()
+            || "服务已返回识别结果。"
+    }
+
+    function compactResultText() {
+        const result = root.resultObject()
+        const text = root.displayText(result, "")
+        return text.length > 180 ? text.slice(0, 177) + "..." : text
     }
 
     function formatBytes(bytes) {
@@ -512,25 +899,87 @@ Item {
         return "准备上传..."
     }
 
-    function resultObject() { return root.recognitionResult || ({}) }
-    function summaryObject() { const result = resultObject(); return result.summary || ({}) }
-    function windowAnalysisObject() { const result = resultObject(); return result.window_analysis || ({}) }
-    function headlineText() { const summary = summaryObject(); const result = resultObject(); return summary.headline || result.summary_text || "识别结果" }
-    function summaryText() { const summary = summaryObject(); const result = resultObject(); return summary.summary_text || result.summary_text || "" }
+    function resultObject() { return root.normalizedResultValue(root.recognitionResult) }
+    function summaryObject() { const result = resultObject(); return root.normalizedResultValue(result.summary || result.summary_info || ({})) }
+    function windowAnalysisObject() { const result = resultObject(); return root.normalizedResultValue(result.window_analysis || result.windowAnalysis || ({})) }
+    function headlineText() {
+        const summary = summaryObject()
+        const result = resultObject()
+        return root.firstDisplayText(summary, ["headline", "title", "name"])
+            || root.firstDisplayText(result, ["headline", "final_class_name", "class_name", "predicted_class_name", "label_name", "diagnosis", "summary_text", "message", "value"])
+            || "识别结果"
+    }
+    function summaryText() {
+        const summary = summaryObject()
+        const result = resultObject()
+        return root.firstDisplayText(summary, ["summary_text", "summary", "description", "text", "message"])
+            || root.firstDisplayText(result, ["summary_text", "summary", "description", "text", "message", "value"])
+    }
 
     function resultClassText() {
         if (!root.recognitionHasResult) {
             return "--"
         }
-        return String(root.resultObject().final_class_name || root.headlineText() || "--")
+        const result = root.resultObject()
+        const summary = root.summaryObject()
+        return root.firstDisplayText(
+            result,
+            [
+                "final_class_name",
+                "class_name",
+                "predicted_class_name",
+                "predict_label_name",
+                "label_name",
+                "label",
+                "category",
+                "diagnosis",
+                "prediction",
+                "result",
+                "value"
+            ])
+            || root.firstDisplayText(summary, ["final_class_name", "class_name", "label_name", "diagnosis"])
+            || root.headlineText()
+            || "--"
     }
 
     function confidenceText() {
-        return root.recognitionHasResult ? root.formatPercent(root.resultObject().confidence) : "--"
+        if (!root.recognitionHasResult) {
+            return "--"
+        }
+
+        const result = root.resultObject()
+        const confidence = root.firstNumericValue(
+            result,
+            [
+                "confidence",
+                "confidence_score",
+                "final_confidence",
+                "probability",
+                "prob",
+                "score",
+                "predict_prob",
+                "predicted_probability"
+            ])
+        return isFinite(confidence) ? root.formatPercent(confidence) : "--"
     }
 
     function audioDurationText() {
-        return root.recognitionHasResult ? root.formatSeconds(root.resultObject().audio_duration_sec) : "--"
+        if (!root.recognitionHasResult) {
+            return "--"
+        }
+
+        const result = root.resultObject()
+        const duration = root.firstNumericValue(
+            result,
+            [
+                "audio_duration_sec",
+                "audio_duration_seconds",
+                "duration_sec",
+                "duration_seconds",
+                "duration",
+                "length_sec"
+            ])
+        return isFinite(duration) ? root.formatSeconds(duration) : "--"
     }
 
     function adviceText() {
@@ -539,9 +988,11 @@ Item {
         }
 
         const summary = root.summaryObject()
-        return summary.diagnosis_advice
-            || summary.recommendation
+        const result = root.resultObject()
+        return root.firstDisplayText(summary, ["diagnosis_advice", "recommendation", "advice", "suggestion"])
+            || root.firstDisplayText(result, ["diagnosis_advice", "recommendation", "advice", "suggestion"])
             || root.summaryText()
+            || root.compactResultText()
             || "请结合临床信息复核识别结果。"
     }
 
@@ -647,6 +1098,42 @@ Item {
                 root.verbose,
                 root.includeProbs)
         }
+    }
+
+    function jsonSavePath(path) {
+        const localPath = root.toLocalFilePath(path).trim()
+        if (localPath.length === 0) {
+            return ""
+        }
+        return /\.json$/i.test(localPath) ? localPath : localPath + ".json"
+    }
+
+    function requestSaveRecognitionJson() {
+        if (!root.recognitionHasResult || root.recognitionBusy) {
+            pageToast.showError("当前没有可保存的识别结果")
+            return
+        }
+        saveRecognitionJsonDialog.open()
+    }
+
+    function saveRecognitionJson(path) {
+        const outputPath = root.jsonSavePath(path)
+        if (outputPath.length === 0) {
+            return
+        }
+        if (!recognitionServiceManager ||
+            typeof recognitionServiceManager.saveRecognitionResultJson !== "function") {
+            pageToast.showError("识别结果保存接口不可用")
+            return
+        }
+
+        const errorMessage = recognitionServiceManager.saveRecognitionResultJson(outputPath)
+        if (errorMessage.length > 0) {
+            pageToast.showError(errorMessage)
+            return
+        }
+
+        pageToast.showSuccess("JSON 已保存：" + root.fileName(outputPath))
     }
 
     ToastNotification {
@@ -1022,7 +1509,9 @@ Item {
 
                         SectionHeader {
                             Layout.fillWidth: true
-                            title: "识别状态"
+                            title: root.recognitionHasResult && root.recognitionErrorMessage.length === 0
+                                ? "识别结果"
+                                : "识别状态"
                         }
 
                         Rectangle {
@@ -1038,6 +1527,23 @@ Item {
                                 anchors.fill: parent
                                 anchors.margins: 16
                                 spacing: 12
+                                visible: !root.recognitionHasResult || root.recognitionErrorMessage.length > 0
+                                opacity: root.recognitionWaitingForResult ? 0 : 1
+                                scale: root.recognitionWaitingForResult ? 0.96 : 1
+
+                                Behavior on opacity {
+                                    NumberAnimation {
+                                        duration: 180
+                                        easing.type: Easing.OutQuad
+                                    }
+                                }
+
+                                Behavior on scale {
+                                    NumberAnimation {
+                                        duration: 220
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
 
                                 Item {
                                     Layout.fillWidth: true
@@ -1194,7 +1700,535 @@ Item {
                                 }
 
                                 InfoStrip {
-                                    text: "支持单通道 WAV 格式，采样率建议 8kHz 或 16kHz，时长不超过 5 分钟。"
+                                    text: "支持单通道 WAV 格式，采样率建议 12kHz 或 16kHz。"
+                                }
+                            }
+
+                            Item {
+                                anchors.fill: parent
+                                visible: root.recognitionWaitingForResult
+                                opacity: root.recognitionWaitingForResult ? 1 : 0
+
+                                Behavior on opacity {
+                                    NumberAnimation {
+                                        duration: 220
+                                        easing.type: Easing.OutQuad
+                                    }
+                                }
+
+                                Column {
+                                    anchors.centerIn: parent
+                                    width: Math.min(parent.width * 0.82, 460)
+                                    spacing: 16
+
+                                    Item {
+                                        id: recognitionWaitingSpinner
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        width: 76
+                                        height: 76
+
+                                        Canvas {
+                                            anchors.fill: parent
+                                            antialiasing: true
+
+                                            onPaint: {
+                                                const ctx = getContext("2d")
+                                                const lineWidth = 7
+                                                const radius = Math.min(width, height) / 2 - lineWidth
+                                                const centerX = width / 2
+                                                const centerY = height / 2
+
+                                                ctx.clearRect(0, 0, width, height)
+                                                ctx.lineWidth = lineWidth
+                                                ctx.lineCap = "round"
+                                                ctx.strokeStyle = root.cssColor(Theme.primary, 0.18)
+                                                ctx.beginPath()
+                                                ctx.arc(centerX, centerY, radius, 0, Math.PI * 2)
+                                                ctx.stroke()
+
+                                                ctx.strokeStyle = root.cssColor(Theme.primary, 1)
+                                                ctx.beginPath()
+                                                ctx.arc(centerX, centerY, radius, -Math.PI * 0.25, Math.PI * 1.15)
+                                                ctx.stroke()
+                                            }
+
+                                            onWidthChanged: requestPaint()
+                                            onHeightChanged: requestPaint()
+                                        }
+
+                                        RotationAnimation on rotation {
+                                            from: 0
+                                            to: 360
+                                            duration: 900
+                                            loops: Animation.Infinite
+                                            running: root.recognitionWaitingForResult
+                                        }
+                                    }
+
+                                    Text {
+                                        width: parent.width
+                                        horizontalAlignment: Text.AlignHCenter
+                                        text: "文件已上传，正在等待服务器返回识别结果"
+                                        color: Theme.textTitle
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 20
+                                        font.bold: true
+                                        wrapMode: Text.WordWrap
+                                        renderType: Text.NativeRendering
+                                    }
+
+                                    Text {
+                                        width: parent.width
+                                        horizontalAlignment: Text.AlignHCenter
+                                        text: "模型正在进行特征分析与推理，请保持当前页面，结果返回后将自动展示。"
+                                        color: Theme.textSecondary
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 14
+                                        lineHeight: 1.28
+                                        wrapMode: Text.WordWrap
+                                        renderType: Text.NativeRendering
+                                    }
+                                }
+                            }
+
+                            ScrollView {
+                                id: recognitionResultScroll
+                                anchors.fill: parent
+                                anchors.margins: 18
+                                clip: true
+                                visible: root.recognitionHasResult && !root.recognitionBusy &&
+                                    root.recognitionErrorMessage.length === 0
+                                contentWidth: availableWidth
+
+                                ScrollBar.horizontal: ScrollBar {
+                                    policy: ScrollBar.AlwaysOff
+                                }
+
+                                ScrollBar.vertical: ScrollBar {
+                                    policy: ScrollBar.AlwaysOff
+                                }
+
+                                ColumnLayout {
+                                    id: recognitionResultColumn
+                                    width: recognitionResultScroll.availableWidth
+                                    spacing: 14
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 12
+
+                                        IconBadge {
+                                            Layout.preferredWidth: 56
+                                            Layout.preferredHeight: 56
+                                            iconSize: 32
+                                            source: root.asset("recognition_result_icon.svg")
+                                            fillColor: Theme.primaryLight
+                                            strokeColor: Theme.primaryBorder
+                                        }
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 3
+
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: root.highlightedResultText(root.headlineText())
+                                                textFormat: Text.RichText
+                                                color: Theme.textTitle
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 24
+                                                font.bold: true
+                                                wrapMode: Text.WordWrap
+                                                renderType: Text.NativeRendering
+                                            }
+
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: {
+                                                    const file = root.fileName(root.lastRequestedFilePath)
+                                                    const model = root.modelEntryForKey(root.lastRequestedModelKey).title
+                                                    return file.length > 0
+                                                        ? ("上传文件: " + file + "  |  模型: " + model)
+                                                        : ("模型: " + model)
+                                                }
+                                                color: Theme.textMuted
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: root.resultMetaFontSize
+                                                elide: Text.ElideRight
+                                                renderType: Text.NativeRendering
+                                            }
+                                        }
+
+                                        Button {
+                                            id: saveRecognitionJsonButton
+
+                                            Layout.preferredWidth: 132
+                                            Layout.preferredHeight: 38
+                                            Layout.alignment: Qt.AlignTop
+                                            enabled: root.recognitionHasResult && !root.recognitionBusy &&
+                                                root.recognitionErrorMessage.length === 0
+                                            hoverEnabled: true
+                                            text: "保存 JSON"
+
+                                            contentItem: Item {
+                                                Row {
+                                                    anchors.centerIn: parent
+                                                    spacing: 6
+
+                                                    Image {
+                                                        width: 16
+                                                        height: 16
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        source: "qrc:/qt/qml/BSSASContent/images/save.png"
+                                                        sourceSize.width: width
+                                                        sourceSize.height: height
+                                                        fillMode: Image.PreserveAspectFit
+                                                        opacity: saveRecognitionJsonButton.enabled ? 1 : 0.45
+                                                        smooth: true
+                                                        mipmap: true
+                                                    }
+
+                                                    Text {
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        text: saveRecognitionJsonButton.text
+                                                        color: saveRecognitionJsonButton.enabled
+                                                            ? Theme.textWhite
+                                                            : Theme.textDisabled
+                                                        font.family: Theme.fontFamily
+                                                        font.pixelSize: 14
+                                                        font.bold: true
+                                                        renderType: Text.NativeRendering
+                                                    }
+                                                }
+                                            }
+
+                                            background: Rectangle {
+                                                radius: 10
+                                                border.width: 1
+                                                border.color: saveRecognitionJsonButton.enabled
+                                                    ? Theme.primary
+                                                    : Theme.border
+                                                color: {
+                                                    if (!saveRecognitionJsonButton.enabled) {
+                                                        return Theme.disabledBg
+                                                    }
+                                                    if (saveRecognitionJsonButton.down) {
+                                                        return Theme.primaryPressed
+                                                    }
+                                                    if (saveRecognitionJsonButton.hovered) {
+                                                        return Theme.primaryHover
+                                                    }
+                                                    return Theme.primary
+                                                }
+                                            }
+
+                                            onClicked: root.requestSaveRecognitionJson()
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 1
+                                        color: Theme.borderLight
+                                    }
+
+                                    GridLayout {
+                                        Layout.fillWidth: true
+                                        columns: width >= 560 ? 3 : 1
+                                        columnSpacing: 10
+                                        rowSpacing: 10
+
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 72
+                                            radius: 12
+                                            color: Theme.primaryLight
+                                            border.width: 1
+                                            border.color: Theme.primaryBorder
+
+                                            ColumnLayout {
+                                                anchors.fill: parent
+                                                anchors.margins: 12
+                                                spacing: 4
+
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    text: "主类别"
+                                                    color: Theme.textMuted
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: root.resultMetaFontSize
+                                                    elide: Text.ElideRight
+                                                    renderType: Text.NativeRendering
+                                                }
+
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    text: root.highlightedResultText(root.resultClassText())
+                                                    textFormat: Text.RichText
+                                                    color: Theme.textTitle
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: 20
+                                                    font.bold: true
+                                                    maximumLineCount: 1
+                                                    elide: Text.ElideRight
+                                                    renderType: Text.NativeRendering
+                                                }
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 72
+                                            radius: 12
+                                            color: Theme.successBg
+                                            border.width: 1
+                                            border.color: root.colorWithAlpha(Theme.success, 0.28)
+
+                                            ColumnLayout {
+                                                anchors.fill: parent
+                                                anchors.margins: 12
+                                                spacing: 4
+
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    text: "置信度"
+                                                    color: Theme.textMuted
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: root.resultMetaFontSize
+                                                    elide: Text.ElideRight
+                                                    renderType: Text.NativeRendering
+                                                }
+
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    text: root.confidenceText()
+                                                    color: Theme.successDark
+                                                    font.family: Theme.numberFontFamily
+                                                    font.pixelSize: 22
+                                                    font.bold: true
+                                                    elide: Text.ElideRight
+                                                    renderType: Text.NativeRendering
+                                                }
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 72
+                                            radius: 12
+                                            color: Theme.purpleBg
+                                            border.width: 1
+                                            border.color: root.colorWithAlpha(Theme.purple, 0.24)
+
+                                            ColumnLayout {
+                                                anchors.fill: parent
+                                                anchors.margins: 12
+                                                spacing: 4
+
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    text: "音频时长"
+                                                    color: Theme.textMuted
+                                                    font.family: Theme.fontFamily
+                                                    font.pixelSize: root.resultMetaFontSize
+                                                    elide: Text.ElideRight
+                                                    renderType: Text.NativeRendering
+                                                }
+
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    text: root.audioDurationText()
+                                                    color: Theme.purple
+                                                    font.family: Theme.numberFontFamily
+                                                    font.pixelSize: 22
+                                                    font.bold: true
+                                                    elide: Text.ElideRight
+                                                    renderType: Text.NativeRendering
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: root.detailedEventCount > 0
+                                                ? ("事件明细 (" + root.detailedEventCount + ")")
+                                                : "事件明细"
+                                            color: Theme.textTitle
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: root.resultHeadingFontSize
+                                            font.bold: true
+                                            renderType: Text.NativeRendering
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            visible: root.detailedEventCount === 0
+                                            text: "当前响应未包含逐事件数组；已展示服务返回的完整 JSON。若需要每个事件，请保持 verbose 为 true 后重新识别。"
+                                            color: Theme.textSecondary
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: 16
+                                            lineHeight: 1.25
+                                            wrapMode: Text.WordWrap
+                                            renderType: Text.NativeRendering
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            visible: root.detailedEventCount === 0
+                                            text: root.prettyJsonText(root.resultObject())
+                                            textFormat: Text.PlainText
+                                            color: Theme.textPrimary
+                                            font.family: Theme.numberFontFamily
+                                            font.pixelSize: root.resultJsonFontSize
+                                            lineHeight: 1.24
+                                            wrapMode: Text.WrapAnywhere
+                                            renderType: Text.NativeRendering
+                                        }
+
+                                        Repeater {
+                                            model: root.detailedEventItems
+
+                                            delegate: Rectangle {
+                                                id: eventDetailCard
+                                                required property var modelData
+
+                                                Layout.fillWidth: true
+                                                implicitHeight: eventDetailColumn.implicitHeight + 20
+                                                radius: 8
+                                                color: Theme.pageBg
+                                                border.width: 1
+                                                border.color: Theme.borderLight
+
+                                                ColumnLayout {
+                                                    id: eventDetailColumn
+                                                    anchors.left: parent.left
+                                                    anchors.right: parent.right
+                                                    anchors.top: parent.top
+                                                    anchors.margins: 10
+                                                    spacing: 8
+
+                                                    RowLayout {
+                                                        Layout.fillWidth: true
+                                                        spacing: 8
+
+                                                        Text {
+                                                            text: root.eventIndexText(eventDetailCard.modelData.sequence)
+                                                            color: Theme.primary
+                                                            font.family: Theme.numberFontFamily
+                                                            font.pixelSize: root.resultMetaFontSize
+                                                            font.bold: true
+                                                            renderType: Text.NativeRendering
+                                                        }
+
+                                                        Text {
+                                                            Layout.fillWidth: true
+                                                            text: root.highlightedResultText(root.eventLabelText(eventDetailCard.modelData.event))
+                                                            textFormat: Text.RichText
+                                                            color: Theme.textTitle
+                                                            font.family: Theme.fontFamily
+                                                            font.pixelSize: root.resultBodyFontSize
+                                                            font.bold: true
+                                                            elide: Text.ElideRight
+                                                            renderType: Text.NativeRendering
+                                                        }
+
+                                                        Text {
+                                                            Layout.maximumWidth: eventDetailCard.width * 0.58
+                                                            text: root.eventMetaText(eventDetailCard.modelData.event)
+                                                            color: Theme.textMuted
+                                                            font.family: Theme.fontFamily
+                                                            font.pixelSize: root.resultMetaFontSize
+                                                            horizontalAlignment: Text.AlignRight
+                                                            elide: Text.ElideRight
+                                                            renderType: Text.NativeRendering
+                                                        }
+                                                    }
+
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: root.prettyJsonText(eventDetailCard.modelData.event)
+                                                        textFormat: Text.PlainText
+                                                        color: Theme.textPrimary
+                                                        font.family: Theme.numberFontFamily
+                                                        font.pixelSize: root.resultJsonFontSize
+                                                        lineHeight: 1.24
+                                                        wrapMode: Text.WrapAnywhere
+                                                        renderType: Text.NativeRendering
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: "总体说明"
+                                            color: Theme.textTitle
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: root.resultHeadingFontSize
+                                            font.bold: true
+                                            renderType: Text.NativeRendering
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: root.highlightedResultText(root.resultSummaryDisplayText())
+                                            textFormat: Text.RichText
+                                            color: Theme.textPrimary
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: root.resultBodyFontSize
+                                            lineHeight: 1.32
+                                            wrapMode: Text.WordWrap
+                                            renderType: Text.NativeRendering
+                                        }
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: "诊断建议"
+                                            color: Theme.textTitle
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: root.resultHeadingFontSize
+                                            font.bold: true
+                                            renderType: Text.NativeRendering
+                                        }
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: root.highlightedResultText(root.adviceText())
+                                            textFormat: Text.RichText
+                                            color: Theme.textPrimary
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: root.resultBodyFontSize
+                                            lineHeight: 1.32
+                                            wrapMode: Text.WordWrap
+                                            renderType: Text.NativeRendering
+                                        }
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        visible: root.recognitionLastRequestId.length > 0
+                                        text: "Request ID: " + root.recognitionLastRequestId
+                                        color: Theme.textWeak
+                                        font.family: Theme.numberFontFamily
+                                        font.pixelSize: 13
+                                        elide: Text.ElideRight
+                                        renderType: Text.NativeRendering
+                                    }
                                 }
                             }
                         }
@@ -1224,7 +2258,7 @@ Item {
                         }
 
                         SummaryItem {
-                            title: "识别结果"
+                            title: "主类别"
                             value: root.resultClassText()
                             stateText: root.recognitionHasResult ? "已识别" : "待识别"
                             stateColor: root.recognitionHasResult ? Theme.success : Theme.textMuted
@@ -1276,6 +2310,17 @@ Item {
         fileMode: FileDialog.OpenFile
         nameFilters: ["WAV (*.wav)"]
         onAccepted: root.startRecognition(root.toLocalFilePath(uploadFileDialog.selectedFile))
+    }
+
+    FileDialog {
+        id: saveRecognitionJsonDialog
+        title: "保存识别结果 JSON"
+        fileMode: FileDialog.SaveFile
+        nameFilters: ["JSON 文件 (*.json)", "所有文件 (*)"]
+        defaultSuffix: "json"
+        acceptLabel: "保存"
+        rejectLabel: "取消"
+        onAccepted: root.saveRecognitionJson(saveRecognitionJsonDialog.selectedFile)
     }
 
     Popup {

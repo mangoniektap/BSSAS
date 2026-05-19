@@ -72,6 +72,13 @@ public:
     /** @brief 取消正在进行的识别请求 */
     Q_INVOKABLE void cancelRecognition();
 
+    /**
+     * @brief 将最近一次识别服务返回的 JSON 保存到指定文件。
+     * @param filePath 输出 JSON 文件路径
+     * @returns 保存失败时的错误消息；成功时返回空字符串。
+     */
+    Q_INVOKABLE QString saveRecognitionResultJson(const QString& filePath) const;
+
 signals:
     /** @brief 忙碌状态变化信号 */
     void busyChanged();
