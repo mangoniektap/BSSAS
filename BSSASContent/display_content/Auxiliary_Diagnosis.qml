@@ -39,12 +39,23 @@ Item {
     readonly property int resultJsonFontSize: 14
     readonly property string fixedDisplayText: "肠鸣音识别"
     readonly property string assetBase: "qrc:/qt/qml/BSSASContent/image resources/auxiliary diagnosis/"
-    readonly property bool compactLayout: width < 980
+    readonly property bool compactLayout: Constants.isCompactContent(width, height) || width < 980
     readonly property int outerMargin: Math.max(12, Math.min(18, width * 0.015))
     readonly property int contentMargin: Math.max(18, Math.min(26, width * 0.022))
     readonly property int topPanelHeight: compactLayout
-        ? Math.min(390, Math.max(320, height * 0.42))
+        ? Math.min(520, Math.max(460, height * 0.56))
         : Math.min(260, Math.max(218, height * 0.31))
+    readonly property int recognitionWaveformBoxSize: compactLayout
+        ? Math.max(118, Math.min(168, width * 0.15, height * 0.18))
+        : Math.max(150, Math.min(220, height * 0.20))
+    readonly property int recognitionWaveformVisualSize: recognitionWaveformBoxSize * (compactLayout ? 1.35 : 1.60)
+    readonly property int workflowNodeIconSize: compactLayout ? 54 : 66
+    readonly property int workflowNodeGlyphSize: compactLayout ? 28 : 34
+    readonly property int workflowNodeHeight: compactLayout ? 108 : 124
+    readonly property int workflowTitleTopMargin: compactLayout ? 9 : 12
+    readonly property int workflowSubtitleTopMargin: compactLayout ? 29 : 34
+    readonly property int workflowTitleFontSize: compactLayout ? 13 : 14
+    readonly property int workflowSubtitleFontSize: compactLayout ? 11 : 12
     readonly property int footerHeight: 28
     readonly property var recognitionModels: [
         { key: "hubert", title: "HuBERT", description: "聚类预测语音模型" },
@@ -245,23 +256,23 @@ Item {
         required property int stepIndex
         property bool active: false
 
-        implicitHeight: 124
+        implicitHeight: root.workflowNodeHeight
 
         Rectangle {
             id: stepIcon
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.top: parent.top
-            width: 66
-            height: 66
-            radius: 33
+            width: root.workflowNodeIconSize
+            height: root.workflowNodeIconSize
+            radius: width / 2
             color: workflowNode.active ? Theme.primaryLight : Theme.pageBg
             border.width: 1
             border.color: workflowNode.active ? Theme.primaryBorder : Theme.borderLight
 
             Image {
                 anchors.centerIn: parent
-                width: 34
-                height: 34
+                width: root.workflowNodeGlyphSize
+                height: root.workflowNodeGlyphSize
                 source: workflowNode.iconSource
                 sourceSize.width: width
                 sourceSize.height: height
@@ -274,14 +285,14 @@ Item {
 
         Text {
             anchors.top: stepIcon.bottom
-            anchors.topMargin: 12
+            anchors.topMargin: root.workflowTitleTopMargin
             anchors.left: parent.left
             anchors.right: parent.right
             horizontalAlignment: Text.AlignHCenter
             text: workflowNode.title
             color: Theme.textTitle
             font.family: Theme.fontFamily
-            font.pixelSize: 14
+            font.pixelSize: root.workflowTitleFontSize
             font.bold: true
             elide: Text.ElideRight
             renderType: Text.NativeRendering
@@ -289,14 +300,14 @@ Item {
 
         Text {
             anchors.top: stepIcon.bottom
-            anchors.topMargin: 34
+            anchors.topMargin: root.workflowSubtitleTopMargin
             anchors.left: parent.left
             anchors.right: parent.right
             horizontalAlignment: Text.AlignHCenter
             text: workflowNode.subtitle
             color: Theme.textMuted
             font.family: Theme.fontFamily
-            font.pixelSize: 12
+            font.pixelSize: root.workflowSubtitleFontSize
             elide: Text.ElideRight
             renderType: Text.NativeRendering
         }
@@ -1166,9 +1177,21 @@ Item {
         border.color: Theme.border
         clip: true
 
-        ColumnLayout {
+        ScrollView {
+            id: diagnosisScrollView
             anchors.fill: parent
             anchors.margins: root.contentMargin
+            clip: true
+            contentWidth: availableWidth
+            contentHeight: Math.max(availableHeight, diagnosisContentColumn.implicitHeight)
+
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AlwaysOff }
+            ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AlwaysOff }
+
+            ColumnLayout {
+            id: diagnosisContentColumn
+            width: diagnosisScrollView.availableWidth
+            height: Math.max(diagnosisScrollView.availableHeight, implicitHeight)
             spacing: 14
 
             Rectangle {
@@ -1231,8 +1254,8 @@ Item {
                             id: modelSelectorCard
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            Layout.preferredWidth: 360
-                            Layout.minimumHeight: 104
+                            Layout.preferredWidth: root.compactLayout ? -1 : 360
+                            Layout.minimumHeight: root.compactLayout ? 92 : 104
                             radius: 16
                             color: modelSelectorMouse.pressed
                                 ? Theme.pageBg
@@ -1336,8 +1359,8 @@ Item {
                             id: switchPanel
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            Layout.preferredWidth: 430
-                            Layout.minimumHeight: 104
+                            Layout.preferredWidth: root.compactLayout ? -1 : 430
+                            Layout.minimumHeight: root.compactLayout ? 92 : 104
                             radius: 16
                             color: Theme.textWhite
                             border.width: 1
@@ -1381,8 +1404,8 @@ Item {
                             id: uploadPanel
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            Layout.preferredWidth: 350
-                            Layout.minimumHeight: 104
+                            Layout.preferredWidth: root.compactLayout ? -1 : 350
+                            Layout.minimumHeight: root.compactLayout ? 92 : 104
                             radius: 16
                             color: uploadMouse.pressed
                                 ? Theme.secondaryPressedBg
@@ -1485,17 +1508,20 @@ Item {
                 }
             }
 
-            RowLayout {
+            GridLayout {
                 id: diagnosisBody
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                spacing: 10
+                columns: root.compactLayout ? 1 : 2
+                columnSpacing: 10
+                rowSpacing: 10
 
                 Rectangle {
                     id: statusPanel
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.preferredWidth: 730
+                    Layout.fillHeight: !root.compactLayout
+                    Layout.preferredWidth: root.compactLayout ? diagnosisBody.width : 730
+                    Layout.preferredHeight: root.compactLayout ? Math.max(620, root.height * 0.68) : -1
                     radius: 16
                     color: Theme.textWhite
                     border.width: 1
@@ -1557,8 +1583,8 @@ Item {
 
                                         Item {
                                             anchors.horizontalCenter: parent.horizontalCenter
-                                            width: parent.width * 0.40
-                                            height: parent.width * 0.40
+                                            width: root.recognitionWaveformBoxSize
+                                            height: root.recognitionWaveformBoxSize
                                             clip: true
                                             opacity: root.recognitionErrorMessage.length > 0 ? 0.45 : 1
 
@@ -1568,8 +1594,8 @@ Item {
                                                  * 先缩小完整图，再用容器裁掉外侧留白，保证中心波形和圆环不被切断。
                                                  */
                                                 anchors.centerIn: parent
-                                                width: parent.width * 1.70
-                                                height: parent.height * 1.70
+                                                width: root.recognitionWaveformVisualSize
+                                                height: root.recognitionWaveformVisualSize
                                                 source: root.asset("recognition_status_waveform.png")
                                                 sourceSize.width: width
                                                 sourceSize.height: height
@@ -1619,7 +1645,7 @@ Item {
                                 Item {
                                     id: workflowTrack
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 124
+                                    Layout.preferredHeight: root.workflowNodeHeight
 
                                     Canvas {
                                         id: workflowConnectorCanvas
@@ -1634,10 +1660,10 @@ Item {
                                             const ctx = getContext("2d")
                                             const nodeCount = root.workflowSteps.length
                                             const spacing = workflowNodeRow.spacing
-                                            const iconRadius = 33
-                                            const connectorPadding = 14
+                                            const iconRadius = root.workflowNodeIconSize / 2
+                                            const connectorPadding = root.compactLayout ? 10 : 14
                                             const nodeWidth = (width - spacing * (nodeCount - 1)) / nodeCount
-                                            const y = 33
+                                            const y = iconRadius
 
                                             ctx.clearRect(0, 0, width, height)
                                             ctx.lineWidth = 1.3
@@ -2237,10 +2263,12 @@ Item {
 
                 Rectangle {
                     id: summaryPanel
-                    Layout.fillHeight: true
-                    Layout.minimumWidth: 310
-                    Layout.preferredWidth: 380
-                    Layout.maximumWidth: 430
+                    Layout.fillWidth: root.compactLayout
+                    Layout.fillHeight: !root.compactLayout
+                    Layout.minimumWidth: root.compactLayout ? 0 : 310
+                    Layout.preferredWidth: root.compactLayout ? diagnosisBody.width : 380
+                    Layout.preferredHeight: root.compactLayout ? 260 : -1
+                    Layout.maximumWidth: root.compactLayout ? 100000 : 430
                     radius: 16
                     color: Theme.textWhite
                     border.width: 1
@@ -2301,6 +2329,7 @@ Item {
                     }
                 }
             }                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+        }
         }
     }
 

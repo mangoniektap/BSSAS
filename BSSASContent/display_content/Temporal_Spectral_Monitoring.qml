@@ -13,11 +13,12 @@ Page {
     id: root
 
     property bool pageActive: true
-    property real layout_margin: 20
+    readonly property bool compactContent: Constants.isCompactContent(width, height)
+    property real layout_margin: compactContent ? 12 : 20
     property real leftPanelSpacing: layout_margin / 2
-    property int leftPanelWidth: 170
-    property int summaryCardHeight: 110
-    property int actionButtonHeight: 40
+    property int leftPanelWidth: compactContent ? 150 : 170
+    property int summaryCardHeight: compactContent ? 94 : 110
+    property int actionButtonHeight: compactContent ? 36 : 40
     readonly property bool isPlotting: daqManager.isReading
     property bool pendingRealtimeSave: false
     property bool jointReportExportEnabled: false
@@ -239,6 +240,7 @@ Page {
             margins: root.layout_margin
         }
         width: root.leftPanelWidth
+        clip: true
 
         DirectionAwareHoverCard {
             id: topic_card
@@ -252,23 +254,23 @@ Page {
 
             ColumnLayout {
                 Layout.alignment: Qt.AlignVCenter
-                spacing: 10
+                spacing: root.compactContent ? 6 : 10
 
                 Text {
                     text: "📡 实时采集信号"
-                    font.pixelSize: 15
+                    font.pixelSize: root.compactContent ? 13 : 15
                     color: Theme.textPrimary
                 }
 
                 Text {
                     text: "📈 采集数据可视化"
-                    font.pixelSize: 15
+                    font.pixelSize: root.compactContent ? 13 : 15
                     color: Theme.textPrimary
                 }
 
                 Text {
                     text: "🔍 多通道时频监测"
-                    font.pixelSize: 15
+                    font.pixelSize: root.compactContent ? 13 : 15
                     color: Theme.textPrimary
                 }
             }
@@ -342,7 +344,7 @@ Page {
                 top: left_radio_button.bottom
                 topMargin: root.leftPanelSpacing
             }
-            height: root.actionButtonHeight * 2 + 142
+            height: root.actionButtonHeight * 2 + (root.compactContent ? 116 : 142)
 
             ColumnLayout {
                 anchors.fill: parent
@@ -634,8 +636,8 @@ Page {
             left: leftPanel.right
             right: parent.right
         }
-        height: 35
-        spacing: 20
+        height: root.compactContent ? 32 : 35
+        spacing: root.compactContent ? 12 : 20
         currentIndex: 0
 
         background: Rectangle {
@@ -654,14 +656,15 @@ Page {
             TabButton {
                 id: tabBtn
                 text: model.btnText
-                width: implicitWidth + 10
+                width: Math.min(implicitWidth + 10, Math.max(150, waveform_spectrum_choose.width / waveformTabRepeater.count - waveform_spectrum_choose.spacing))
 
                 contentItem: Text {
                     text: tabBtn.text
                     font.family: Theme.numberFontFamily
-                    font.pixelSize: 18
+                    font.pixelSize: root.compactContent ? 15 : 18
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
                     color: tabBtn.checked ? Theme.textPrimary : Theme.textMuted
 
                     Behavior on color {

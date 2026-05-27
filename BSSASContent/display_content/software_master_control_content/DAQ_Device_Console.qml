@@ -11,7 +11,9 @@ import MangoComponent
 Item {
     id: root
 
-    property real layout_margin: 30
+    readonly property bool compactContent: Constants.isCompactContent(width, height)
+    property real layout_margin: compactContent ? 20 : 30
+    readonly property real controlWidth: compactContent ? 132 : 150
     property bool voiceLocalizationEnabled: false
     property var openSensorLocalizationPage: null
     property var closeVoiceLocalization: null
@@ -186,7 +188,7 @@ Item {
                             text: root.isConnected ? "已初始化" : "初始化设备"
                             hoverEnabled: true
                             Layout.alignment: Qt.AlignVCenter
-                            Layout.preferredWidth: 120
+                            Layout.preferredWidth: root.controlWidth
                             Layout.preferredHeight: 40
                             enabled: !root.isCollecting && !root.isConnected
 
@@ -230,7 +232,7 @@ Item {
                             text: "刷新设备"
                             hoverEnabled: true
                             Layout.alignment: Qt.AlignVCenter
-                            Layout.preferredWidth: 120
+                            Layout.preferredWidth: root.controlWidth
                             Layout.preferredHeight: 40
                             enabled: !root.isCollecting
 
@@ -594,7 +596,7 @@ Item {
                             text: root.voiceLocalizationEnabled ? "关闭定位" : "配置传感器"
                             hoverEnabled: true
                             Layout.alignment: Qt.AlignVCenter
-                            Layout.preferredWidth: 150
+                            Layout.preferredWidth: root.controlWidth
                             Layout.preferredHeight: 40
 
                             contentItem: Text {
@@ -687,7 +689,7 @@ Item {
                             text: root.isCollecting ? "采集中..." : "启动DAQ"
                             hoverEnabled: true
                             Layout.fillHeight: true
-                            Layout.preferredWidth: 120
+                            Layout.preferredWidth: root.controlWidth
                             enabled: root.isConnected
 
                             contentItem: Text {
@@ -719,7 +721,7 @@ Item {
                             text: "停止DAQ"
                             hoverEnabled: true
                             Layout.fillHeight: true
-                            Layout.preferredWidth: 120
+                            Layout.preferredWidth: root.controlWidth
                             enabled: root.isCollecting
 
                             contentItem: Text {

@@ -14,7 +14,8 @@ Page {
     id: root
 
     property bool pageActive: true
-    property real layout_margin: 20
+    readonly property bool compactContent: Constants.isCompactContent(width, height)
+    property real layout_margin: compactContent ? 14 : 20
     property bool voiceLocalizationEnabled: false
     property var localizationPoints: [
         ({ channel: "CH1", label: "回盲部-最核心区", x: 0.52, y: 0.28 }),
@@ -84,7 +85,7 @@ Page {
             left: parent.left
             margins: layout_margin * 1.5
         }
-        font.family: Theme.fontFamily; font.pixelSize: Theme.fontPageTitle; font.weight: Font.DemiBold
+        font.family: Theme.fontFamily; font.pixelSize: root.compactContent ? Theme.fontHeroSubtitle : Theme.fontPageTitle; font.weight: Font.DemiBold
         text: "软件总控"
         renderType: Text.NativeRendering
         color: Theme.textPrimary
@@ -99,8 +100,8 @@ Page {
             right: parent.right
             rightMargin: layout_margin
         }
-        height: 35
-        spacing: 20
+        height: root.compactContent ? 32 : 35
+        spacing: root.compactContent ? 12 : 20
         currentIndex: 0
 
         background: Rectangle {
@@ -121,14 +122,15 @@ Page {
             TabButton {
                 id: tabBtn
                 text: model.btnText
-                width: implicitWidth + 10
+                width: Math.min(implicitWidth + 10, Math.max(96, control_selection.width / controlTabRepeater.count - control_selection.spacing))
 
                 contentItem: Text {
                     text: tabBtn.text
                     font.family: Theme.fontFamily
-                    font.pixelSize: 18
+                    font.pixelSize: root.compactContent ? 15 : 18
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
                     color: tabBtn.checked ? Theme.primary : Theme.textMuted
                     Behavior on color { ColorAnimation { duration: 200 } }
                 }

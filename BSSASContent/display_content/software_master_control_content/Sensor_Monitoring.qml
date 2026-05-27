@@ -23,6 +23,12 @@ Item {
     readonly property color chipColor: Theme.disabledBg
     readonly property real wheelStep: 0.01
     readonly property int pointRowSpacing: 8
+    readonly property bool compactContent: Constants.isCompactContent(width, height)
+    readonly property bool stackedContent: compactContent || Constants.isNarrowContent(width)
+    readonly property int pageMargin: compactContent ? 20 : 30
+    readonly property int contentPanelHeight: stackedContent
+        ? Math.max(700, Math.min(840, height - pageMargin * 2))
+        : Math.max(520, height - pageMargin * 2 - 118)
 
     /**
      * @brief 为源颜色叠加 alpha 通道值，返回新的 rgba 颜色。
@@ -288,9 +294,21 @@ Item {
         root.workingPoints = root.copyPoints(root.localizationPoints)
     }
 
-    ColumnLayout {
+    ScrollView {
+        id: sensorScrollView
         anchors.fill: parent
-        anchors.margins: 30
+        clip: true
+        contentWidth: availableWidth
+        contentHeight: Math.max(availableHeight, rootLayout.implicitHeight + root.pageMargin * 2)
+
+        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AlwaysOff }
+        ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AlwaysOff }
+
+        ColumnLayout {
+        id: rootLayout
+        x: root.pageMargin
+        y: root.pageMargin
+        width: sensorScrollView.availableWidth - root.pageMargin * 2
         spacing: 18
 
         RowLayout {
@@ -327,24 +345,27 @@ Item {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.fillHeight: true
+            Layout.preferredHeight: root.contentPanelHeight
             radius: 22
             color: root.panelColor
             border.width: 1
             border.color: root.borderColor
 
-            RowLayout {
+            GridLayout {
                 id: contentRow
                 anchors.fill: parent
                 anchors.margins: 18
-                spacing: 16
+                columns: root.stackedContent ? 1 : 2
+                columnSpacing: 16
+                rowSpacing: 16
 
                 Rectangle {
                     id: mapCard
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.minimumWidth: 360
-                    Layout.preferredWidth: Math.max(380, contentRow.width * 0.6)
+                    Layout.fillHeight: !root.stackedContent
+                    Layout.minimumWidth: root.stackedContent ? 0 : 360
+                    Layout.preferredWidth: root.stackedContent ? contentRow.width : Math.max(380, contentRow.width * 0.6)
+                    Layout.preferredHeight: root.stackedContent ? Math.max(340, Math.min(430, root.height * 0.46)) : -1
                     radius: 18
                     color: "transparent"
                     border.width: 1
@@ -452,10 +473,12 @@ Item {
                 }
 
                 Rectangle {
-                    Layout.fillHeight: true
-                    Layout.minimumWidth: 320
-                    Layout.preferredWidth: Math.max(360, contentRow.width * 0.4)
-                    Layout.maximumWidth: 520
+                    Layout.fillWidth: root.stackedContent
+                    Layout.fillHeight: !root.stackedContent
+                    Layout.minimumWidth: root.stackedContent ? 0 : 320
+                    Layout.preferredWidth: root.stackedContent ? contentRow.width : Math.max(360, contentRow.width * 0.4)
+                    Layout.preferredHeight: root.stackedContent ? 310 : -1
+                    Layout.maximumWidth: root.stackedContent ? 100000 : 520
                     radius: 18
                     color: "transparent"
                     border.width: 1
@@ -716,6 +739,7 @@ Item {
                     color: root.accentColor
                 }
             }
+        }
         }
     }
 }

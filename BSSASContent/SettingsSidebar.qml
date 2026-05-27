@@ -17,13 +17,14 @@ Item {
     property bool opened: false
     property bool closing: false
     property bool startupSettled: false
-    property real edgeMargin: 18
-    property real panelRadius: 50
+    readonly property bool compactWindow: Constants.isCompactContent(width, height)
+    property real edgeMargin: compactWindow ? 12 : 18
+    property real panelRadius: compactWindow ? 32 : 50
     property int panelAnimationDuration: 280
     property int backdropAnimationDuration: 220
     readonly property int closeVisibilityDelay: Math.max(panelAnimationDuration, backdropAnimationDuration) + 40
 
-    readonly property real panelWidth: Math.max(0, Math.min(root.width - root.edgeMargin, Math.min(420, Math.max(320, root.width * 0.32))))
+    readonly property real panelWidth: Math.max(0, Math.min(root.width - root.edgeMargin, Math.min(compactWindow ? 380 : 420, Math.max(320, root.width * 0.32))))
     readonly property bool darkMode: {
         const color = Qt.color(systemPalette.window)
         return (0.299 * color.r + 0.587 * color.g + 0.114 * color.b) < 0.5

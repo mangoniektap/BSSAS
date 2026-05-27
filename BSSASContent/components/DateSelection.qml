@@ -21,8 +21,11 @@ Item {
     readonly property real _overlayHeight: overlayLayer.height > 0
         ? overlayLayer.height
         : (overlayLayer.parent && overlayLayer.parent.height > 0 ? overlayLayer.parent.height : 800)
-    readonly property real _dialogWidth: Math.round(_overlayWidth * 0.3)
-    readonly property real _dialogHeight: Math.round(_inputMode === 2 ? _dialogWidth : _overlayHeight * 0.7)
+    readonly property real _dialogMargin: 48
+    readonly property real _dialogWidth: Math.round(Math.max(360, Math.min(_overlayWidth - _dialogMargin, _overlayWidth * 0.3)))
+    readonly property real _dialogHeight: Math.round(Math.max(
+        _inputMode === 2 ? 320 : 520,
+        Math.min(_overlayHeight - _dialogMargin, _inputMode === 2 ? _dialogWidth : _overlayHeight * 0.7)))
     readonly property url _calendarIconSource: "qrc:/qt/qml/BSSASContent/images/calendar.png"
     readonly property url _correctIconSource: "qrc:/qt/qml/BSSASContent/images/correct.png"
     readonly property url _editIconSource: "qrc:/qt/qml/BSSASContent/images/pencil.png"

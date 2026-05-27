@@ -15,11 +15,12 @@ Page {
     readonly property string assetBase: "qrc:/qt/qml/BSSASContent/image resources/about/"
     readonly property real posterAspectRatio: 2171 / 576
     readonly property real waveAspectRatio: 1084 / 396
-    readonly property real waveImageScale: 1.10
+    readonly property real waveImageScale: compactCards ? 0.96 : 1.08
     readonly property int outerMargin: Math.max(14, Math.min(22, width * 0.018))
     readonly property int cardSpacing: 16
-    readonly property bool compactCards: width < 980
-    readonly property real posterWidth: Math.max(0, Math.min(width - outerMargin * 2, height * 0.36 * posterAspectRatio))
+    readonly property bool compactCards: Constants.isCompactContent(width, height) || width < 980
+    readonly property real posterHeightBudget: height * (compactCards ? 0.24 : 0.36)
+    readonly property real posterWidth: Math.max(0, Math.min(width - outerMargin * 2, posterHeightBudget * posterAspectRatio))
     readonly property real posterHeight: posterWidth / posterAspectRatio
     readonly property int informationCardHeight: compactCards ? 318 : Math.max(270, Math.min(318, height * 0.34))
     readonly property int designPanelHeight: compactCards ? 290 : Math.max(142, Math.min(166, height * 0.18))
@@ -457,6 +458,7 @@ Page {
                         anchors.fill: parent
 
                         Text {
+                            id: introDescriptionText
                             anchors.top: parent.top
                             anchors.left: parent.left
                             anchors.right: parent.right
@@ -469,16 +471,27 @@ Page {
                             renderType: Text.NativeRendering
                         }
 
-                        Image {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.bottom: parent.bottom
-                            anchors.bottomMargin: -15
-                            width: parent.width * root.waveImageScale
-                            height: width / root.waveAspectRatio
-                            source: root.asset("intro_waveform_strip.png")
-                            fillMode: Image.PreserveAspectFit
-                            smooth: true
-                            mipmap: true
+                        Item {
+                            id: introWaveBox
+                            anchors {
+                                top: introDescriptionText.bottom
+                                topMargin: root.compactCards ? 8 : 12
+                                left: parent.left
+                                right: parent.right
+                                bottom: parent.bottom
+                            }
+                            clip: true
+
+                            Image {
+                                anchors.centerIn: parent
+                                width: Math.min(parent.width * root.waveImageScale,
+                                                parent.height * root.waveAspectRatio)
+                                height: width / root.waveAspectRatio
+                                source: root.asset("intro_waveform_strip.png")
+                                fillMode: Image.PreserveAspectFit
+                                smooth: true
+                                mipmap: true
+                            }
                         }
                     }
                 }

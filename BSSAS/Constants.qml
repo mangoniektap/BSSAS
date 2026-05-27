@@ -16,6 +16,22 @@ QtObject {
     readonly property int x: Math.floor(Screen.width - width) / 2
     readonly property int y: Math.floor(Screen.height - height) / 2
 
+    readonly property int referenceWindowWidth: 1928
+    readonly property int referenceWindowHeight: 1205
+    readonly property int minimumTargetWindowWidth: 1469
+    readonly property int minimumTargetWindowHeight: 918
+    readonly property int compactContentWidth: 1280
+    readonly property int compactContentHeight: 860
+    readonly property int narrowContentWidth: 1008
+
+    function isCompactContent(contentWidth, contentHeight) {
+        return contentWidth < compactContentWidth || contentHeight < compactContentHeight
+    }
+
+    function isNarrowContent(contentWidth) {
+        return contentWidth < narrowContentWidth
+    }
+
     readonly property int pageCacheRetentionMs: 10 * 60 * 1000
     readonly property string version: "26.05.20"
 }

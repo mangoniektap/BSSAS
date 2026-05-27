@@ -10,6 +10,11 @@ Item {
     anchors.fill: parent
     // 暴露精确到具体参数
     property alias display_area: right_bottom_rectangle
+    readonly property bool compactWindow: Constants.isCompactContent(width, height)
+    readonly property int contentRightMargin: compactWindow ? 24 : 40
+    readonly property int contentBottomMargin: compactWindow ? 24 : 40
+    readonly property real contentTopRatio: compactWindow ? 0.075 : 0.1
+    readonly property int contentRadius: compactWindow ? 32 : 50
     
     Rectangle {
         id: mainwindow_background
@@ -22,14 +27,14 @@ Item {
         width: Math.floor(parent.width * 0.775)
         anchors{
             top: parent.top
-            topMargin: parent.height * 0.1
+            topMargin: parent.height * contentTopRatio
             bottom: parent.bottom
-            bottomMargin: 40
+            bottomMargin: contentBottomMargin
             right: parent.right
-            rightMargin: 40
+            rightMargin: contentRightMargin
         }
         color: Theme.contentBg
-        radius:50
+        radius: contentRadius
         border.width: 1
         border.color: Theme.border
     }

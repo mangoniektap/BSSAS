@@ -22,8 +22,11 @@ Item {
     readonly property real _overlayHeight: overlayLayer.height > 0
         ? overlayLayer.height
         : (overlayLayer.parent && overlayLayer.parent.height > 0 ? overlayLayer.parent.height : 800)
-    readonly property real _dialogWidth: Math.round(_overlayWidth * 0.25)
-    readonly property real _dialogHeight: Math.round(_overlayHeight * (root._inputMode === 1 ? 0.3 : 0.6))
+    readonly property real _dialogMargin: 48
+    readonly property real _dialogWidth: Math.round(Math.max(320, Math.min(_overlayWidth - _dialogMargin, _overlayWidth * 0.25)))
+    readonly property real _dialogHeight: Math.round(Math.max(
+        root._inputMode === 1 ? 300 : 420,
+        Math.min(_overlayHeight - _dialogMargin, _overlayHeight * (root._inputMode === 1 ? 0.34 : 0.6))))
     readonly property color _panelColor: Theme.primaryLighter
     readonly property color _surfaceAccentColor: Theme.pageBg
     readonly property url _correctIconSource: "qrc:/qt/qml/BSSASContent/images/correct.png"

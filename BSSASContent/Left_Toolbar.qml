@@ -13,15 +13,22 @@ Item {
     signal settingClicked()
 
     property alias display_content_selection: sidebar.currentIndex
-    property int navFrameTopSpacing: 20
+    readonly property bool compactWindow: Constants.isCompactContent(parent ? parent.width : width, parent ? parent.height : height)
+    property int navFrameTopSpacing: compactWindow ? 12 : 20
+    readonly property int outerMargin: compactWindow ? 14 : 20
+    readonly property int brandHeight: compactWindow ? 104 : 130
+    readonly property int brandLogoSize: compactWindow ? 70 : 90
+    readonly property int brandTitleFontSize: compactWindow ? Theme.fontCardTitle : Theme.fontHeroSubtitle
+    readonly property int navFontSize: compactWindow ? Theme.fontCardTitle : Theme.fontPageTitle
+    readonly property int securityBottomMargin: compactWindow ? 44 : 120
 
-    width: Math.floor(parent.width * 0.225) - 80
+    width: Math.max(compactWindow ? 210 : 260, Math.floor(parent.width * 0.225) - (compactWindow ? 48 : 80))
 
     anchors {
         top: parent.top
         bottom: parent.bottom
         left: parent.left
-        margins: 20
+        margins: root.outerMargin
     }
 
     Item {
@@ -29,7 +36,7 @@ Item {
 
         Item {
             id: brandHeader
-            height: 130
+            height: root.brandHeight
             anchors {
                 top: parent.top
                 left: parent.left
@@ -47,8 +54,8 @@ Item {
 
                 Image {
                     id: brandLogo
-                    Layout.preferredWidth: 90
-                    Layout.preferredHeight: 90
+                    Layout.preferredWidth: root.brandLogoSize
+                    Layout.preferredHeight: root.brandLogoSize
                     source: "qrc:/qt/qml/BSSASContent/image resources/home page/brand_bowel_sound_logo.png"
                     sourceClipRect: Qt.rect(390, 96, 820, 820)
                     fillMode: Image.PreserveAspectFit
@@ -66,7 +73,7 @@ Item {
                         color: Theme.primary
                         elide: Text.ElideRight
                         font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontHeroSubtitle
+                        font.pixelSize: root.brandTitleFontSize
                         font.weight: Font.DemiBold
                         renderType: Text.NativeRendering
                     }
@@ -90,7 +97,7 @@ Item {
             height: parent.height * 0.5
             anchors {
                 top: brandHeader.bottom
-                topMargin: 40
+                topMargin: root.compactWindow ? 24 : 40
                 left: parent.left
                 right: parent.right
             }
@@ -119,7 +126,7 @@ Item {
                     fill: parent
                     margins: 12
                 }
-                spacing: 10
+                spacing: root.compactWindow ? 8 : 10
                 currentIndex: 3
 
                 background: Rectangle { color: "transparent" }
@@ -163,7 +170,7 @@ Item {
                         required property var modelData
 
                         text: control.modelData.title
-                        font.family: Theme.fontFamily; font.pixelSize: Theme.fontPageTitle; font.weight: Font.Medium
+                        font.family: Theme.fontFamily; font.pixelSize: root.navFontSize; font.weight: Font.Medium
                         implicitHeight: (sidebar.height - sidebar.spacing * 5) / 6
                         width: sidebar.width
 
@@ -251,7 +258,7 @@ Item {
             anchors {
                 horizontalCenter: parent.horizontalCenter
                 bottom: parent.bottom
-                bottomMargin: 120
+            bottomMargin: root.securityBottomMargin
             }
             source: "qrc:/qt/qml/BSSASContent/image resources/home page/security_badge_banner.png"
             sourceClipRect: Qt.rect(360, 0, 1328, 768)

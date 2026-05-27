@@ -29,6 +29,18 @@ Item {
     readonly property int systemStatusTileSpacing: 10
     readonly property int systemStatusTileHeight: 220
     readonly property int systemStatusCardContentSpacing: 10
+    readonly property bool compactContent: Constants.isCompactContent(width, height)
+    readonly property int responsiveSystemStatusIconSize: compactContent ? 38 : systemStatusIconSize
+    readonly property int responsiveSystemStatusTileHeight: compactContent ? 106 : systemStatusTileHeight
+    readonly property int responsiveSystemStatusPanelSpacing: compactContent ? 8 : systemStatusPanelSpacing
+    readonly property int responsiveSystemStatusTileSpacing: compactContent ? 8 : systemStatusTileSpacing
+    readonly property int responsiveSystemStatusCardContentSpacing: compactContent ? 6 : systemStatusCardContentSpacing
+    readonly property int responsiveRecentMetricHeight: compactContent ? 150 : recentSignalMetricHeight
+    readonly property int responsiveRecentSignalPanelHeight: compactContent ? 360 : -1
+    readonly property real responsiveRecentWaveformHeight: compactContent
+                                                           ? Math.max(92, Math.min(118, width * 0.1))
+                                                           : 0
+    readonly property int responsiveSystemStatusPanelHeight: compactContent ? 312 : -1
     readonly property var overviewCards: [
         {
             "title": "今日采集",
@@ -621,8 +633,8 @@ Item {
         }
     }
 
-    RowLayout {
-        id: homeDetailPanels
+    ScrollView {
+        id: detailScrollView
         anchors {
             top: overviewCardGrid.bottom
             topMargin: 16
@@ -631,14 +643,27 @@ Item {
             bottom: parent.bottom
             bottomMargin: 18
         }
-        spacing: 16
+        clip: true
+        contentWidth: availableWidth
+        contentHeight: Math.max(availableHeight, homeDetailPanels.height)
+        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AlwaysOff }
+        ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AlwaysOff }
         z: 1
+
+        GridLayout {
+            id: homeDetailPanels
+            width: detailScrollView.availableWidth
+            height: root.compactContent ? implicitHeight : detailScrollView.availableHeight
+            columns: root.compactContent ? 1 : 2
+            columnSpacing: 16
+            rowSpacing: 16
 
         Rectangle {
             id: recentSignalPanel
             Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.preferredWidth: homeDetailPanels.width * 0.56
+            Layout.fillHeight: !root.compactContent
+            Layout.preferredWidth: root.compactContent ? homeDetailPanels.width : homeDetailPanels.width * 0.56
+            Layout.preferredHeight: root.responsiveRecentSignalPanelHeight
             Layout.minimumHeight: 190
             radius: 22
             color: Theme.textWhite
@@ -686,9 +711,11 @@ Item {
                 Image {
                     id: recentSignalWaveform
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
+                    Layout.fillHeight: !root.compactContent
                     Layout.alignment: Qt.AlignHCenter
                     Layout.minimumHeight: 72
+                    Layout.preferredHeight: root.compactContent ? root.responsiveRecentWaveformHeight : -1
+                    Layout.maximumHeight: root.compactContent ? root.responsiveRecentWaveformHeight : 16777215
                     source: "qrc:/qt/qml/BSSASContent/image resources/home page/recent_signal_waveform_preview.png"
                     sourceClipRect: Qt.rect(root.recentSignalWaveformClipLeft,
                                             root.recentSignalWaveformClipTop,
@@ -703,8 +730,9 @@ Item {
                 GridLayout {
                     id: recentSignalMetricGrid
                     Layout.fillWidth: true
-                    Layout.preferredHeight: root.recentSignalMetricHeight
-                    columns: 4
+                    Layout.preferredHeight: root.responsiveRecentMetricHeight
+                    Layout.minimumHeight: root.compactContent ? 136 : 120
+                    columns: root.compactContent ? 2 : 4
                     columnSpacing: 10
                     rowSpacing: 10
 
@@ -784,8 +812,9 @@ Item {
         Rectangle {
             id: systemStatusPanel
             Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.preferredWidth: homeDetailPanels.width * 0.44
+            Layout.fillHeight: !root.compactContent
+            Layout.preferredWidth: root.compactContent ? homeDetailPanels.width : homeDetailPanels.width * 0.44
+            Layout.preferredHeight: root.responsiveSystemStatusPanelHeight
             Layout.minimumHeight: 190
             radius: 22
             color: Theme.textWhite
@@ -798,7 +827,7 @@ Item {
                     fill: parent
                     margins: 18
                 }
-                spacing: root.systemStatusPanelSpacing
+                spacing: root.responsiveSystemStatusPanelSpacing
 
                 Item {
                     Layout.fillWidth: true
@@ -837,16 +866,18 @@ Item {
                     Layout.alignment: Qt.AlignTop
                     Layout.preferredHeight: rowCount * tileHeight +
                                             spacing * (rowCount - 1)
-                    columns: width < 420 ? 2 : 4
-                    spacing: root.systemStatusTileSpacing
+                    columns: root.compactContent || width < 420 ? 2 : 4
+                    spacing: root.responsiveSystemStatusTileSpacing
                     readonly property int rowCount: Math.ceil(root.systemStatusCards.length / columns)
-                    readonly property real tileHeight: Math.min(
-                                                           root.systemStatusTileHeight,
-                                                           Math.max(
-                                                               128,
-                                                               (systemStatusPanel.height - 86 -
-                                                                spacing * (rowCount - 1)) /
-                                                               rowCount))
+                    readonly property real tileHeight: root.compactContent
+                                                       ? root.responsiveSystemStatusTileHeight
+                                                       : Math.min(
+                                                             root.responsiveSystemStatusTileHeight,
+                                                             Math.max(
+                                                                 128,
+                                                                 (systemStatusPanel.height - 86 -
+                                                                  spacing * (rowCount - 1)) /
+                                                                 rowCount))
 
                     Repeater {
                         model: root.systemStatusCards
@@ -869,12 +900,12 @@ Item {
                                     centerIn: parent
                                 }
                                 width: parent.width - 18
-                                spacing: root.systemStatusCardContentSpacing
+                                spacing: root.responsiveSystemStatusCardContentSpacing
 
                                 Image {
                                     anchors.horizontalCenter: parent.horizontalCenter
-                                    width: root.systemStatusIconSize
-                                    height: root.systemStatusIconSize
+                                    width: root.responsiveSystemStatusIconSize
+                                    height: root.responsiveSystemStatusIconSize
                                     source: statusData.icon
                                     fillMode: Image.PreserveAspectFit
                                     smooth: true
@@ -888,7 +919,7 @@ Item {
                                     elide: Text.ElideRight
                                     color: Theme.textPrimary
                                     font.family: Theme.fontFamily
-                                    font.pixelSize: 14
+                                    font.pixelSize: root.compactContent ? 13 : 14
                                     renderType: Text.NativeRendering
                                 }
 
@@ -919,6 +950,7 @@ Item {
                     }
                 }
             }
+        }
         }
     }
 

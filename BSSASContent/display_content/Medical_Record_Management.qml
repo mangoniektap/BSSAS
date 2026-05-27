@@ -12,7 +12,8 @@ Page {
     id: root
 
     property bool pageActive: true
-    property real pageMargin: 30
+    readonly property bool compactContent: Constants.isCompactContent(width, height)
+    property real pageMargin: compactContent ? 20 : 30
     property date recordingDate: new Date()
     property int recordingHour: new Date().getHours()
     property int recordingMinute: new Date().getMinutes()
@@ -298,12 +299,16 @@ Page {
         anchors {
             top: parent.top
             left: parent.left
+            right: parent.right
             margins: root.pageMargin
         }
         font.family: Theme.fontFamily; font.pixelSize: Theme.fontPageTitle; font.weight: Font.Bold
         text: "基于多特征联合检测的肠鸣音分析报告"
         renderType: Text.NativeRendering
         color: Theme.primary
+        wrapMode: Text.WordWrap
+        maximumLineCount: root.compactContent ? 2 : 1
+        elide: Text.ElideRight
     }
 
     ScrollView {

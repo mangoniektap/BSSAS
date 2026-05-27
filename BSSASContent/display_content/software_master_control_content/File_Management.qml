@@ -34,6 +34,11 @@ Item {
     readonly property color pressedFillColor: root.colorWithAlpha(themeBlue, 0.16)
     readonly property color primaryButtonColor: themeBlue
     readonly property color primaryButtonPressedColor: root.colorWithAlpha(themeBlue, 0.88)
+    readonly property bool compactContent: Constants.isCompactContent(width, height)
+    readonly property int pageMargin: compactContent ? 20 : 30
+    readonly property int cardMargin: compactContent ? 20 : 24
+    readonly property int sectionSpacing: compactContent ? 20 : 24
+    readonly property int controlPreferredWidth: compactContent ? 148 : 170
     readonly property var importProcessingItems: [
         qsTr("\u5e26\u901a\u6ee4\u6ce2"),
         qsTr("\u9677\u6ce2\u6ee4\u6ce2"),
@@ -297,10 +302,10 @@ Item {
         clip: true
         contentWidth: availableWidth
         contentHeight: mainColumn.implicitHeight
-        leftPadding: 30
-        topPadding: 30
-        rightPadding: 30
-        bottomPadding: 30
+        leftPadding: root.pageMargin
+        topPadding: root.pageMargin
+        rightPadding: root.pageMargin
+        bottomPadding: root.pageMargin
 
         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AlwaysOff }
         ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AlwaysOff }
@@ -308,7 +313,7 @@ Item {
         ColumnLayout {
             id: mainColumn
             width: pageScrollView.availableWidth
-            spacing: 24
+            spacing: root.sectionSpacing
 
             Rectangle {
                 Layout.fillWidth: true
@@ -321,7 +326,7 @@ Item {
                 ColumnLayout {
                     id: importCardContent
                     anchors.fill: parent
-                    anchors.margins: 24
+                    anchors.margins: root.cardMargin
                     spacing: 18
 
                     RowLayout {
@@ -365,7 +370,7 @@ Item {
                         Button {
                             id: importWavFileButton
                             Layout.alignment: Qt.AlignLeft
-                            Layout.preferredWidth: 220
+                            Layout.preferredWidth: root.compactContent ? 190 : 220
                             Layout.preferredHeight: 44
                             hoverEnabled: true
                             enabled: !root.pendingImportedAnalysis && !root.pendingRealtimeSave
@@ -404,7 +409,7 @@ Item {
                         Button {
                             id: openReportButton
                             Layout.alignment: Qt.AlignLeft
-                            Layout.preferredWidth: 220
+                            Layout.preferredWidth: root.compactContent ? 190 : 220
                             Layout.preferredHeight: 44
                             hoverEnabled: true
                             enabled: !root.pendingImportedAnalysis && !root.pendingRealtimeSave
@@ -454,7 +459,7 @@ Item {
                         Select {
                             id: importAnalysisTimeLengthChoose
 
-                            Layout.preferredWidth: 170
+                            Layout.preferredWidth: root.controlPreferredWidth
                             Layout.preferredHeight: 50
                             font.family: Theme.fontFamily; font.pixelSize: Theme.fontBody; font.weight: Font.Normal
                             currentIndex: AppState.analysisTimeLengthIndex(AppState.importAnalysisTimeLength)
@@ -567,7 +572,7 @@ Item {
                         Button {
                             id: importScientificFilterConfigButton
 
-                            Layout.preferredWidth: 96
+                            Layout.preferredWidth: root.compactContent ? 88 : 96
                             Layout.preferredHeight: 36
                             hoverEnabled: true
                             text: qsTr("配置")
@@ -682,7 +687,7 @@ Item {
                         Button {
                             id: importAdaptiveNoiseReductionConfigButton
 
-                            Layout.preferredWidth: 96
+                            Layout.preferredWidth: root.compactContent ? 88 : 96
                             Layout.preferredHeight: 36
                             hoverEnabled: true
                             text: qsTr("配置")
@@ -850,7 +855,7 @@ Item {
                 ColumnLayout {
                     id: saveCardContent
                     anchors.fill: parent
-                    anchors.margins: 24
+                    anchors.margins: root.cardMargin
                     spacing: 18
 
                     RowLayout {
@@ -893,7 +898,7 @@ Item {
                         Button {
                             id: saveDataButton
                             Layout.alignment: Qt.AlignLeft
-                            Layout.preferredWidth: 220
+                            Layout.preferredWidth: root.compactContent ? 190 : 220
                             Layout.preferredHeight: 44
                             hoverEnabled: true
                             enabled: root.canSaveRealtimeData
@@ -1084,7 +1089,7 @@ Item {
                     Select {
                         id: importAdaptiveNoiseReductionLevelSelect
 
-                        Layout.preferredWidth: 180
+                        Layout.preferredWidth: root.compactContent ? 160 : 180
                         Layout.preferredHeight: 46
                         currentIndex: importAdaptiveNoiseReductionConfigPopup.level
                         delegateHeight: 30

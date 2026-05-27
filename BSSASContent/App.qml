@@ -12,8 +12,11 @@ Window {
     id: rootwindow
     property alias mainWindowBackground: mainwindow_background
     property bool settingsSidebarOpen: false
+    readonly property bool compactWindow: Constants.isCompactContent(width, height)
     width: Constants.width
     height: Constants.height
+    minimumWidth: Constants.minimumTargetWindowWidth
+    minimumHeight: Constants.minimumTargetWindowHeight
     x: Constants.x
     y: Constants.y
 
