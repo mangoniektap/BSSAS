@@ -106,24 +106,46 @@ Item {
         return inactiveOutlineColor
     }
     readonly property real _notchPadding: 4
-    readonly property bool _showOutlineNotch: type === "outlined" && _showFloatingText && isFloating
-    readonly property real _notchMinX: container.radius + 8
-    readonly property real _notchMaxX: container.width - container.radius - 8
+
+    property real _notchProgress: root.isFloating ? 1.0 : 0.0
+    Behavior on _notchProgress {
+        NumberAnimation {
+            duration: root._labelAnimationDuration
+            easing.type: Easing.InOutCubic
+        }
+    }
+    on_NotchProgressChanged: root.requestOutlinePaint()
+
+    readonly property bool _showOutlineNotch: type === "outlined" && _showFloatingText
+    readonly property real _notchMinX: container.radius
+    readonly property real _notchMaxX: container.width - container.radius
     readonly property real _notchLeft: {
-        if (!_showOutlineNotch) {
+        if (!_showOutlineNotch || root._notchProgress === 0.0) {
             return _notchMinX
         }
 
-        const notchStart = fieldContent.x + labelContainer.x - _notchPadding
-        return Math.max(_notchMinX, Math.min(_notchMaxX, notchStart))
+        const absoluteX = (root.leadingIcon ? root.iconPadding : root.contentPadding) + fieldContent.x + labelContainer.x
+        const floatingScale = Math.min(1.0, root._labelFloatingPixelSize / Math.max(1, root._labelBasePixelSize))
+        const targetLabelWidth = Math.min(labelText.implicitWidth * floatingScale, fieldContent.width)
+        const notchStart = absoluteX - _notchPadding
+        const notchEnd = notchStart + targetLabelWidth + (_notchPadding * 2)
+        const notchCenter = (notchStart + notchEnd) / 2
+        const currentWidth = (notchEnd - notchStart) * root._notchProgress
+        return Math.max(_notchMinX, Math.min(_notchMaxX, notchCenter - currentWidth / 2))
     }
     readonly property real _notchRight: {
-        if (!_showOutlineNotch) {
+        if (!_showOutlineNotch || root._notchProgress === 0.0) {
             return _notchMinX
         }
 
-        const notchEnd = fieldContent.x + labelContainer.x + labelContainer.width + _notchPadding
-        return Math.max(_notchLeft, Math.min(_notchMaxX, notchEnd))
+        const absoluteX = (root.leadingIcon ? root.iconPadding : root.contentPadding) + fieldContent.x + labelContainer.x
+        const floatingScale = Math.min(1.0, root._labelFloatingPixelSize / Math.max(1, root._labelBasePixelSize))
+        const targetLabelWidth = Math.min(labelText.implicitWidth * floatingScale, fieldContent.width)
+        const notchStart = absoluteX - _notchPadding
+        const notchEnd = notchStart + targetLabelWidth + (_notchPadding * 2)
+        const notchCenter = (notchStart + notchEnd) / 2
+        const currentWidth = (notchEnd - notchStart) * root._notchProgress
+        return Math.max(_notchLeft, Math.min(_notchMaxX, notchCenter + currentWidth / 2))
     }
 
     signal accepted()
@@ -336,27 +358,31 @@ Item {
                     visible: root._showFloatingText
                     width: Math.min(labelText.implicitWidth * labelText.scale, fieldContent.width)
                     height: labelText.implicitHeight * labelText.scale
+                    x: {
+                        if (root.isFloating && root.type === "outlined") {
+                            const baseAbsoluteX = (root.leadingIcon ? root.iconPadding : root.contentPadding) + 
+                                                  (root.leadingIcon ? 24 + root.iconSpacing : 0)
+                            return Math.max(0, container.radius + root._notchPadding - baseAbsoluteX)
+                        }
+                        return 0
+                    }
                     y: root.type === "filled"
                         ? (root.isFloating ? 8 : 16)
                         : (root.isFloating ? -8 : 16)
                     z: 1
 
-                    Behavior on y {
+                    Behavior on x {
                         NumberAnimation {
                             duration: root._labelAnimationDuration
                             easing.type: Easing.InOutCubic
                         }
                     }
 
-                    Rectangle {
-                        visible: root.type === "outlined" && root.isFloating
-                        anchors.fill: parent
-                        anchors.leftMargin: -root._notchPadding
-                        anchors.rightMargin: -root._notchPadding
-                        anchors.topMargin: -1
-                        anchors.bottomMargin: -1
-                        radius: 2
-                        color: root.labelBackgroundColor
+                    Behavior on y {
+                        NumberAnimation {
+                            duration: root._labelAnimationDuration
+                            easing.type: Easing.InOutCubic
+                        }
                     }
 
                     Text {

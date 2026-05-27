@@ -19,6 +19,10 @@ Item {
     property bool pendingRealtimeSave: false
     property bool pendingReportOpen: false
     property string importStatusText: ""
+    readonly property bool canSaveRealtimeData: dataManager.realtimeCollectionAvailable
+        && !daqManager.isReading
+        && !root.pendingImportedAnalysis
+        && !root.pendingRealtimeSave
 
     readonly property color themeBlue: Theme.primary
     readonly property color dividerColor: root.colorWithAlpha(themeBlue, 0.22)
@@ -892,7 +896,7 @@ Item {
                             Layout.preferredWidth: 220
                             Layout.preferredHeight: 44
                             hoverEnabled: true
-                            enabled: !root.pendingImportedAnalysis && !root.pendingRealtimeSave
+                            enabled: root.canSaveRealtimeData
                             text: "保存为 WAV 文件"
 
                             contentItem: Text {
@@ -911,7 +915,7 @@ Item {
                             }
 
                             onClicked: {
-                                if (root.pendingRealtimeSave) {
+                                if (!root.canSaveRealtimeData) {
                                     return
                                 }
                                 root.pendingRealtimeSave = true

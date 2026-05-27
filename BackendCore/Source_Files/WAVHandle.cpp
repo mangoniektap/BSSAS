@@ -335,7 +335,9 @@ WavExportResult runWavExport(
     const QString& temporaryFloatFilePath,
     int sampleRate,
     int channelCount,
-    const QString& pythonScriptPath)
+    const QString& pythonScriptPath,
+    const QString& outputDirectoryPath = QString(),
+    const QString& outputBaseName = QString())
 {
     if (temporaryFloatFilePath.isEmpty() || !QFile::exists(temporaryFloatFilePath)) {
         qCritical() << "WAVHandle: temporary float cache file does not exist:"
@@ -366,15 +368,22 @@ WavExportResult runWavExport(
     }
 
     const int effectiveChannelCount = std::max(1, channelCount);
+    const QString effectiveOutputDirectoryPath =
+        outputDirectoryPath.trimmed().isEmpty()
+            ? DatabaseStoragePaths::AUDIO_PATH
+            : QDir::toNativeSeparators(outputDirectoryPath.trimmed());
     QStringList commandLineArguments;
     commandLineArguments
         << QStringLiteral("-B")
         << pythonScriptPath
         << temporaryFloatFilePath
-        << DatabaseStoragePaths::AUDIO_PATH
+        << effectiveOutputDirectoryPath
         << QString::number(sampleRate);
-    if (effectiveChannelCount > 1) {
+    if (effectiveChannelCount > 1 || !outputBaseName.trimmed().isEmpty()) {
         commandLineArguments << QString::number(effectiveChannelCount);
+    }
+    if (!outputBaseName.trimmed().isEmpty()) {
+        commandLineArguments << outputBaseName.trimmed();
     }
 
     QProcess process;
@@ -440,8 +449,25 @@ void WAVHandle::setReferenceNoiseChannelSaveEnabled(bool enabled)
  */
 void WAVHandle::startSaveAsWav()
 {
+    startSaveAsWav(QString(), QString());
+}
+
+void WAVHandle::startSaveAsWav(
+    const QString& outputDirectoryPath,
+    const QString& outputBaseName)
+{
     DataManager* realtimeDataManager = DataManager::instance();
     DaqDeviceManager* realtimeDaqManager = DaqDeviceManager::instance();
+
+    if (realtimeDaqManager->isReading()) {
+        emit saveFailed(QStringLiteral("请先停止采集后再保存数据"));
+        return;
+    }
+
+    if (!realtimeDataManager->realtimeCollectionAvailable()) {
+        emit saveFailed(QStringLiteral("当前没有已完成的实时采集数据"));
+        return;
+    }
 
     QVector<QString> channelTemporaryFilePaths;
     channelTemporaryFilePaths.reserve(kRealtimeVisibleChannelCount + 1);
@@ -516,7 +542,9 @@ void WAVHandle::startSaveAsWav()
          realtimeSampleRate,
          waveletDenoisingEnabled,
          transientNoiseSuppressionEnabled,
-         motionArtifactReductionEnabled]() {
+         motionArtifactReductionEnabled,
+         outputDirectoryPath,
+         outputBaseName]() {
             realtimeExportWorker->exportRealtimeChannelsToWav(
                 channelTemporaryFilePaths,
                 postProcessedChannelCount,
@@ -524,7 +552,9 @@ void WAVHandle::startSaveAsWav()
                 waveletDenoisingEnabled,
                 transientNoiseSuppressionEnabled,
                 motionArtifactReductionEnabled,
-                resolvePythonScriptPath(QStringLiteral("WAVExport.py")));
+                resolvePythonScriptPath(QStringLiteral("WAVExport.py")),
+                outputDirectoryPath,
+                outputBaseName);
         });
     connect(
         realtimeExportWorker,
@@ -606,7 +636,9 @@ void WAVHandle::startSaveImportedAsWav()
 void WAVHandle::startSaveOperation(
     const QString& temporaryFloatFilePath,
     int sampleRate,
-    bool importedSave)
+    bool importedSave,
+    const QString& outputDirectoryPath,
+    const QString& outputBaseName)
 {
     QThread* thread = new QThread;
     WAVHandleWorker* worker = new WAVHandleWorker();
@@ -615,11 +647,18 @@ void WAVHandle::startSaveOperation(
     m_thread = thread;
     m_worker = worker;
 
-    connect(thread, &QThread::started, worker, [worker, temporaryFloatFilePath, sampleRate]() {
+    connect(
+        thread,
+        &QThread::started,
+        worker,
+        [worker, temporaryFloatFilePath, sampleRate, outputDirectoryPath, outputBaseName]() {
         worker->exportToWav(
             temporaryFloatFilePath,
             sampleRate,
-            resolvePythonScriptPath(QStringLiteral("WAVExport.py")));
+            resolvePythonScriptPath(QStringLiteral("WAVExport.py")),
+            1,
+            outputDirectoryPath,
+            outputBaseName);
     });
 
     if (importedSave) {
@@ -752,10 +791,18 @@ void WAVHandleWorker::exportToWav(
     const QString& temporaryFloatFilePath,
     int sampleRate,
     const QString& pythonScriptPath,
-    int channelCount)
+    int channelCount,
+    const QString& outputDirectoryPath,
+    const QString& outputBaseName)
 {
     const WavExportResult result =
-        runWavExport(temporaryFloatFilePath, sampleRate, channelCount, pythonScriptPath);
+        runWavExport(
+            temporaryFloatFilePath,
+            sampleRate,
+            channelCount,
+            pythonScriptPath,
+            outputDirectoryPath,
+            outputBaseName);
     if (result.succeeded) {
         qDebug() << "WAV file saved to:" << result.outputPath;
         emit exportSucceeded(result.outputPath);
@@ -849,7 +896,9 @@ void WAVHandleWorker::exportRealtimeChannelsToWav(
     bool waveletDenoisingEnabled,
     bool transientNoiseSuppressionEnabled,
     bool motionArtifactReductionEnabled,
-    const QString& pythonScriptPath)
+    const QString& pythonScriptPath,
+    const QString& outputDirectoryPath,
+    const QString& outputBaseName)
 {
     if (channelTemporaryFilePaths.isEmpty()) {
         emit exportFailed(QStringLiteral("当前没有可导出的激活通道数据"));
@@ -921,7 +970,9 @@ void WAVHandleWorker::exportRealtimeChannelsToWav(
         temporaryFloatFilePath,
         sampleRate,
         processedChannelSamples.size(),
-        pythonScriptPath);
+        pythonScriptPath,
+        outputDirectoryPath,
+        outputBaseName);
     if (result.succeeded) {
         qDebug() << "Realtime multichannel WAV file saved to:" << result.outputPath
                  << "channels:" << processedChannelSamples.size();

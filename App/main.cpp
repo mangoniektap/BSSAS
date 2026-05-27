@@ -18,6 +18,7 @@
 #include "DataManager.h"
 #include "DatabaseManager.h"
 #include "GenerateManager.h"
+#include "JointExportManager.h"
 #include "LocalizationIntestinalSound.h"
 #include "Multi_featureJointDetection.h"
 #include "RecognitionServiceManager.h"
@@ -45,6 +46,15 @@ int main(int argc, char *argv[])
     GenerateManager generateManager(&app);
     AdaptiveDownsampling adaptiveDownsampling;
     SignalDFTCalculation signalDFTCalculation;
+    WAVHandle* wavHandle = WAVHandle::instance();
+    Multi_featureJointDetection* multiFeatureJointDetection =
+        Multi_featureJointDetection::instance();
+    JointExportManager jointExportManager(
+        wavHandle,
+        &signalDFTCalculation,
+        multiFeatureJointDetection,
+        &generateManager,
+        &app);
     RealtimeAudioMonitor realtimeAudioMonitor(daqManager, &app);
     QObject::connect(
         SignalPreprocessing::instance(),
@@ -59,7 +69,7 @@ int main(int argc, char *argv[])
     QQmlApplicationEngine engine;
 
     engine.rootContext()->setContextProperty("daqManager", daqManager);
-    engine.rootContext()->setContextProperty("wavHandle", WAVHandle::instance());
+    engine.rootContext()->setContextProperty("wavHandle", wavHandle);
     engine.rootContext()->setContextProperty(
         "signalPreprocessing",
         SignalPreprocessing::instance());
@@ -67,11 +77,12 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("databaseManager", databaseManager);
     engine.rootContext()->setContextProperty(
         "multiFeatureJointDetection",
-        Multi_featureJointDetection::instance());
+        multiFeatureJointDetection);
     engine.rootContext()->setContextProperty(
         "localizationIntestinalSound",
         LocalizationIntestinalSound::instance());
     engine.rootContext()->setContextProperty("generateManager", &generateManager);
+    engine.rootContext()->setContextProperty("jointExportManager", &jointExportManager);
     engine.rootContext()->setContextProperty("adaptiveDownsampling", &adaptiveDownsampling);
     engine.rootContext()->setContextProperty("signalDFTCalculation", &signalDFTCalculation);
     engine.rootContext()->setContextProperty("realtimeAudioMonitor", &realtimeAudioMonitor);

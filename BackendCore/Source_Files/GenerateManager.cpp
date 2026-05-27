@@ -1123,6 +1123,25 @@ bool createOrUpdateTemporaryJsonFromTemplate(
     *jsonFilePath = outputJsonPath;
     return true;
 }
+
+bool ensurePdfOutputParentExists(const QString& pdfFilePath, QString* errorMessage)
+{
+    const QFileInfo pdfInfo(pdfFilePath);
+    const QString outputDirectoryPath = pdfInfo.absolutePath();
+    if (outputDirectoryPath.isEmpty() || QDir(outputDirectoryPath).exists()) {
+        return true;
+    }
+
+    if (QDir().mkpath(outputDirectoryPath)) {
+        return true;
+    }
+
+    if (errorMessage != nullptr) {
+        *errorMessage =
+            QStringLiteral("无法创建报告输出目录: %1").arg(outputDirectoryPath);
+    }
+    return false;
+}
 } // namespace
 
 class PDFExport
@@ -1476,46 +1495,121 @@ QString GenerateManager::exportIdentificationAndFeatureExtractionReport()
 
     const QString reportKind = QStringLiteral("AFDROIS");
     const QDateTime generatedAt = QDateTime::currentDateTime();
+    const QString pdfFilePath =
+        createOutputFilePath(createReportId(reportKind, generatedAt.date()), QStringLiteral("pdf"));
+
+    QString errorMessage;
+    const QString exportedPdfPath =
+        exportIdentificationAndFeatureExtractionReportTo(pdfFilePath, &errorMessage);
+    if (exportedPdfPath.isEmpty()) {
+        return {};
+    }
+
+    emit exportCompleted(exportedPdfPath);
+    return exportedPdfPath;
+}
+
+QString GenerateManager::exportIdentificationAndFeatureExtractionReportTo(
+    const QString& pdfFilePath,
+    QString* errorMessage)
+{
+    QString localErrorMessage;
+    QString* effectiveErrorMessage =
+        errorMessage != nullptr ? errorMessage : &localErrorMessage;
+
+    if (pdfFilePath.trimmed().isEmpty()) {
+        *effectiveErrorMessage = QStringLiteral("报告输出路径为空");
+        emit exportFailed(*effectiveErrorMessage);
+        return {};
+    }
+
+    if (!ensurePdfOutputParentExists(pdfFilePath, effectiveErrorMessage)) {
+        qWarning() << "GenerateManager:" << *effectiveErrorMessage;
+        emit exportFailed(*effectiveErrorMessage);
+        return {};
+    }
+
+    const QString reportKind = QStringLiteral("AFDROIS");
+    const QDateTime generatedAt = QDateTime::currentDateTime();
     const QString reportId = createReportId(reportKind, generatedAt.date());
     const QVariantMap featureValues = DataManager::instance()->importedFeatureValues();
     if (featureValues.isEmpty()) {
-        const QString errorMessage =
-            QStringLiteral("当前没有可导出的分析结果");
-        qWarning() << "GenerateManager:" << errorMessage;
-        emit exportFailed(errorMessage);
+        *effectiveErrorMessage = QStringLiteral("当前没有可导出的分析结果");
+        qWarning() << "GenerateManager:" << *effectiveErrorMessage;
+        emit exportFailed(*effectiveErrorMessage);
         return {};
     }
 
     const QVariantMap reportPayload =
         buildReportPayload(featureValues, reportId, reportKind, generatedAt);
-    const QString pdfFilePath = createOutputFilePath(reportId, QStringLiteral("pdf"));
     const QString preferredJsonPath = DataManager::instance()->importedFeatureTemporaryFilePath();
     QString jsonFilePath;
 
-    QString errorMessage;
     if (!createOrUpdateTemporaryJsonFromTemplate(
             reportPayload,
             reportKind,
             preferredJsonPath,
             &jsonFilePath,
-            &errorMessage)) {
-        qWarning() << "GenerateManager:" << errorMessage;
-        emit exportFailed(errorMessage);
+            effectiveErrorMessage)) {
+        qWarning() << "GenerateManager:" << *effectiveErrorMessage;
+        emit exportFailed(*effectiveErrorMessage);
         return {};
     }
 
     DataManager::instance()->setImportedFeatureTemporaryFilePath(jsonFilePath);
 
     const QString exportedPdfPath =
-        m_pdfExport->exportReportFromJson(jsonFilePath, pdfFilePath, &errorMessage);
+        m_pdfExport->exportReportFromJson(jsonFilePath, pdfFilePath, effectiveErrorMessage);
     if (exportedPdfPath.isEmpty()) {
-        qWarning() << "GenerateManager:" << errorMessage;
-        emit exportFailed(errorMessage);
+        qWarning() << "GenerateManager:" << *effectiveErrorMessage;
+        emit exportFailed(*effectiveErrorMessage);
         return {};
     }
 
     qDebug() << "GenerateManager: report exported to" << exportedPdfPath;
-    emit exportCompleted(exportedPdfPath);
+    return exportedPdfPath;
+}
+
+QString GenerateManager::exportCollectionInformationReport(
+    const QVariantMap& formData,
+    const QString& pdfFilePath,
+    QString* errorMessage)
+{
+    QString localErrorMessage;
+    QString* effectiveErrorMessage =
+        errorMessage != nullptr ? errorMessage : &localErrorMessage;
+
+    if (pdfFilePath.trimmed().isEmpty()) {
+        *effectiveErrorMessage = QStringLiteral("采集信息报告输出路径为空");
+        emit exportFailed(*effectiveErrorMessage);
+        return {};
+    }
+
+    if (!ensurePdfOutputParentExists(pdfFilePath, effectiveErrorMessage)) {
+        qWarning() << "GenerateManager:" << *effectiveErrorMessage;
+        emit exportFailed(*effectiveErrorMessage);
+        return {};
+    }
+
+    const QString reportKind = QStringLiteral("ISAR");
+    const QDateTime generatedAt = QDateTime::currentDateTime();
+    const QString reportId = createReportId(reportKind, generatedAt.date());
+    const QVariantMap reportPayload =
+        buildCollectionInformationReportPayload(formData, reportId, generatedAt);
+
+    const QString exportedPdfPath =
+        m_pdfExport->exportReport(
+            reportPayload,
+            reportKind,
+            pdfFilePath,
+            effectiveErrorMessage);
+    if (exportedPdfPath.isEmpty()) {
+        qWarning() << "GenerateManager:" << *effectiveErrorMessage;
+        emit exportFailed(*effectiveErrorMessage);
+        return {};
+    }
+
+    qDebug() << "GenerateManager: collection report exported to" << exportedPdfPath;
     return exportedPdfPath;
 }
 
@@ -1774,6 +1868,65 @@ QVariantMap GenerateManager::buildReportPayload(
         { QStringLiteral("recognizedSegments"), normalizeVariantForJson(recognizedSegments) },
         { QStringLiteral("featureStats"), featureStats },
         { QStringLiteral("eventFeatureExport"), buildEventFeatureExport(recognizedSegments) },
+        { QStringLiteral("templateContext"), templateContext }
+    });
+
+    return payload;
+}
+
+QVariantMap GenerateManager::buildCollectionInformationReportPayload(
+    const QVariantMap& formData,
+    const QString& reportId,
+    const QDateTime& generatedAt)
+{
+    QVariantMap templateContext;
+    const QVariantMap normalizedFormData =
+        normalizeVariantForJson(formData).toMap();
+    for (auto iterator = normalizedFormData.cbegin();
+         iterator != normalizedFormData.cend();
+         ++iterator) {
+        templateContext.insert(iterator.key(), iterator.value());
+    }
+
+    const auto insertIfEmpty =
+        [&templateContext](const QString& key, const QVariant& value) {
+            if (!templateContext.contains(key) ||
+                templateContext.value(key).toString().trimmed().isEmpty()) {
+                templateContext.insert(key, value);
+            }
+        };
+
+    templateContext.insert(QStringLiteral("report_id"), reportId);
+    insertIfEmpty(QStringLiteral("record_year"), generatedAt.date().toString(QStringLiteral("yyyy")));
+    insertIfEmpty(QStringLiteral("record_month"), generatedAt.date().toString(QStringLiteral("MM")));
+    insertIfEmpty(QStringLiteral("record_day"), generatedAt.date().toString(QStringLiteral("dd")));
+    insertIfEmpty(QStringLiteral("sign_doc_year"), generatedAt.date().toString(QStringLiteral("yyyy")));
+    insertIfEmpty(QStringLiteral("sign_doc_month"), generatedAt.date().toString(QStringLiteral("MM")));
+    insertIfEmpty(QStringLiteral("sign_doc_day"), generatedAt.date().toString(QStringLiteral("dd")));
+    insertIfEmpty(
+        QStringLiteral("sampling_rate"),
+        QString::number(DataManager::instance()->configuredSampleRate()));
+    insertIfEmpty(QStringLiteral("bit_depth"), QStringLiteral("16"));
+    insertIfEmpty(QStringLiteral("sensor_type"), QStringLiteral("Microphone"));
+    insertIfEmpty(QStringLiteral("is_continuous"), true);
+    insertIfEmpty(QStringLiteral("quadrants"), QVariantList {});
+    insertIfEmpty(QStringLiteral("associated_diseases"), QVariantList {});
+
+    QVariantMap payload;
+    payload.insert(QStringLiteral("schema"), QStringLiteral("BSSAS.ReportPayload"));
+    payload.insert(QStringLiteral("schemaVersion"), QStringLiteral("1.0"));
+    payload.insert(QStringLiteral("reportKind"), QStringLiteral("ISAR"));
+    payload.insert(QStringLiteral("meta"), QVariantMap {
+        { QStringLiteral("reportId"), reportId },
+        { QStringLiteral("reportKind"), QStringLiteral("ISAR") },
+        { QStringLiteral("generatedAt"), generatedAt.toString(Qt::ISODate) },
+        { QStringLiteral("dataSource"), QStringLiteral("实时采集 WAV 文件") },
+        { QStringLiteral("reportType"), QStringLiteral("CollectionInformation") },
+        { QStringLiteral("application"), QCoreApplication::applicationName() }
+    });
+    payload.insert(QStringLiteral("cachedData"), QVariantMap {});
+    payload.insert(QStringLiteral("reportData"), QVariantMap {
+        { QStringLiteral("templateName"), QStringLiteral("ISAR") },
         { QStringLiteral("templateContext"), templateContext }
     });
 

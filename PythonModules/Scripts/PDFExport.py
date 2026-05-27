@@ -13,7 +13,10 @@ from pathlib import Path
 from shared_paths import resolve_temporary_dir
 
 
-TEMPLATE_RELATIVE_PATH = Path("Generate") / "report" / "AFDROIS.html"
+TEMPLATE_RELATIVE_PATHS = {
+    "AFDROIS": Path("Generate") / "Report" / "AFDROIS.html",
+    "ISAR": Path("Generate") / "Report" / "ISAR.html",
+}
 TOKEN_PATTERN = re.compile(r"(\{\{.*?\}\}|\{%.*?%\})", re.DOTALL)
 UNAVAILABLE_TEXT = "未提供"
 MISSING_NUMERIC_TEXT = "--"
@@ -43,17 +46,22 @@ class TemplateObject(dict):
         return MissingValue()
 
 
-def resolve_template_path() -> Path:
+def resolve_template_path(report_kind: str = "AFDROIS") -> Path:
     configured_path = os.environ.get("BSSAS_REPORT_TEMPLATE_PATH", "").strip()
     if configured_path:
         candidate = Path(configured_path)
         if candidate.exists():
             return candidate
 
+    normalized_report_kind = (report_kind or "AFDROIS").strip().upper()
+    template_relative_path = TEMPLATE_RELATIVE_PATHS.get(
+        normalized_report_kind,
+        TEMPLATE_RELATIVE_PATHS["AFDROIS"],
+    )
     script_dir = Path(__file__).resolve().parent
     candidate_paths = [
-        script_dir.parent.parent / TEMPLATE_RELATIVE_PATH,
-        script_dir.parent.parent / "distribution" / TEMPLATE_RELATIVE_PATH,
+        script_dir.parent.parent / template_relative_path,
+        script_dir.parent.parent / "distribution" / template_relative_path,
     ]
 
     checked_paths = []
@@ -597,6 +605,54 @@ def build_afdrois_context(payload: dict, json_path: Path) -> dict:
     return context
 
 
+def report_kind_from_payload(payload: dict) -> str:
+    report_data = payload.get("reportData", {})
+    meta = payload.get("meta", {})
+    return str(
+        report_data.get("templateName")
+        or payload.get("reportKind")
+        or meta.get("reportKind")
+        or "AFDROIS"
+    ).strip().upper()
+
+
+def isar_template_value(value):
+    if isinstance(value, str):
+        candidate = value.strip()
+        return candidate if candidate else "无"
+    return value
+
+
+def build_isar_context(payload: dict, json_path: Path) -> dict:
+    report_data = payload.get("reportData", {})
+    template_context = report_data.get("templateContext", {})
+    meta = payload.get("meta", {})
+    report_datetime = parse_report_datetime(
+        first_present(meta.get("generatedAt"), template_context.get("generated_at"))
+    )
+
+    context = {
+        key: isar_template_value(value)
+        for key, value in template_context.items()
+        if not str(key).startswith("_doc")
+    }
+    context["report_id"] = first_present(
+        context.get("report_id"),
+        meta.get("reportId"),
+        f"ISAR-{json_path.stem}",
+    )
+    context.setdefault("record_year", report_datetime.strftime("%Y"))
+    context.setdefault("record_month", report_datetime.strftime("%m"))
+    context.setdefault("record_day", report_datetime.strftime("%d"))
+    context.setdefault("sign_doc_year", report_datetime.strftime("%Y"))
+    context.setdefault("sign_doc_month", report_datetime.strftime("%m"))
+    context.setdefault("sign_doc_day", report_datetime.strftime("%d"))
+    context.setdefault("quadrants", [])
+    context.setdefault("associated_diseases", [])
+    context.setdefault("is_continuous", True)
+    return context
+
+
 def to_template_value(value):
     if isinstance(value, dict):
         return TemplateObject({key: to_template_value(item) for key, item in value.items()})
@@ -695,9 +751,14 @@ def create_html_from_json(json_path: Path) -> str:
     with json_path.open("r", encoding="utf-8-sig") as file:
         payload = json.load(file)
 
-    template_path = resolve_template_path()
+    report_kind = report_kind_from_payload(payload)
+    template_path = resolve_template_path(report_kind)
     template_text = template_path.read_text(encoding="utf-8-sig")
-    context = build_afdrois_context(payload, json_path)
+    context = (
+        build_isar_context(payload, json_path)
+        if report_kind == "ISAR"
+        else build_afdrois_context(payload, json_path)
+    )
     return render_template(template_text, context)
 
 
@@ -734,6 +795,8 @@ def export_pdf_with_browser(html_text: str, pdf_path: Path) -> None:
             command,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=180,
             check=False,
         )

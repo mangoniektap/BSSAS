@@ -23,6 +23,7 @@ DataManager* DataManager::m_instance = nullptr;
 
 namespace {
 constexpr int kRealtimeChannelCount = 8;
+constexpr int kRealtimeVisibleChannelCount = 7;
 
 int sanitizeSampleRate(int sampleRate)
 {
@@ -256,6 +257,26 @@ void DatabaseCache::collectionCompleted()
 
     releaseDownsampledRingBuffer();
     m_collectionCompleted = true;
+}
+
+bool DatabaseCache::realtimeCollectionAvailable() const
+{
+    if (!m_collectionCompleted) {
+        return false;
+    }
+
+    const int visibleChannelCount =
+        std::min(
+            kRealtimeVisibleChannelCount,
+            static_cast<int>(m_realtimeChannelTemporaryFilePaths.size()));
+    for (int channelIndex = 0; channelIndex < visibleChannelCount; ++channelIndex) {
+        if (dataElementCountFromTemporaryFile(
+                m_realtimeChannelTemporaryFilePaths[channelIndex]) > 0) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void DatabaseCache::splicTimeDomainData(const QVector<float>& rawData, int sampleRate)
@@ -1659,13 +1680,23 @@ void DataManager::setConfiguredSampleRate(int sampleRate)
     }
 }
 
+bool DataManager::realtimeCollectionAvailable()
+{
+    QMutexLocker locker(&m_databaseCacheMutex);
+    return m_databaseCache != nullptr && m_databaseCache->realtimeCollectionAvailable();
+}
+
 void DataManager::initializeDatabase()
 {
     ensureDatabaseStorageDirectories();
 
+    bool availabilityChanged = false;
     {
         QMutexLocker locker(&m_databaseCacheMutex);
+        const bool wasAvailable =
+            m_databaseCache != nullptr && m_databaseCache->realtimeCollectionAvailable();
         ensureDatabaseCacheCreated()->clear();
+        availabilityChanged = wasAvailable;
     }
 
     {
@@ -1674,17 +1705,30 @@ void DataManager::initializeDatabase()
     }
 
     emit importedAnalysisSummaryChanged();
+    if (availabilityChanged) {
+        emit realtimeCollectionAvailabilityChanged();
+    }
 }
 
 void DataManager::collectionCompleted()
 {
-    QMutexLocker locker(&m_databaseCacheMutex);
+    bool availabilityChanged = false;
 
-    if (m_databaseCache == nullptr) {
-        return;
+    {
+        QMutexLocker locker(&m_databaseCacheMutex);
+
+        if (m_databaseCache == nullptr) {
+            return;
+        }
+
+        const bool wasAvailable = m_databaseCache->realtimeCollectionAvailable();
+        m_databaseCache->collectionCompleted();
+        availabilityChanged = wasAvailable != m_databaseCache->realtimeCollectionAvailable();
     }
 
-    m_databaseCache->collectionCompleted();
+    if (availabilityChanged) {
+        emit realtimeCollectionAvailabilityChanged();
+    }
 }
 
 void DataManager::splicTimeDomainData(const QVector<float>& rawData, int sampleRate)

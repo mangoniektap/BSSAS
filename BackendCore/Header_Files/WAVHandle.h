@@ -44,7 +44,9 @@ public slots:
         const QString& temporaryFloatFilePath,
         int sampleRate,
         const QString& pythonScriptPath,
-        int channelCount = 1);
+        int channelCount = 1,
+        const QString& outputDirectoryPath = QString(),
+        const QString& outputBaseName = QString());
     /**
      * @brief 将实时多通道数据导出为 WAV 文件。
      * @param channelTemporaryFilePaths       各通道临时文件路径列表
@@ -62,7 +64,9 @@ public slots:
         bool waveletDenoisingEnabled,
         bool transientNoiseSuppressionEnabled,
         bool motionArtifactReductionEnabled,
-        const QString& pythonScriptPath);
+        const QString& pythonScriptPath,
+        const QString& outputDirectoryPath = QString(),
+        const QString& outputBaseName = QString());
     /**
      * @brief 从 WAV 文件导入数据。
      * @param pythonScriptPath Python 脚本路径
@@ -99,6 +103,9 @@ public:
 
     /** @brief 启动实时数据保存为 WAV */
     Q_INVOKABLE void startSaveAsWav();
+    void startSaveAsWav(
+        const QString& outputDirectoryPath,
+        const QString& outputBaseName);
     /** @brief 启动导入数据保存为 WAV */
     Q_INVOKABLE void startSaveImportedAsWav();
     /**
@@ -154,7 +161,9 @@ private:
     void startSaveOperation(
         const QString& temporaryFloatFilePath,
         int sampleRate,
-        bool importedSave);
+        bool importedSave,
+        const QString& outputDirectoryPath = QString(),
+        const QString& outputBaseName = QString());
 
     static WAVHandle* m_instance;
 

@@ -41,7 +41,16 @@ def float32_file_to_pcm16(float_file_path, channel_count=1):
     return bytes(pcm_data)
 
 
-def write_wav(float_file_path, output_wav_path, sample_rate, channel_count=1):
+def safe_output_stem(output_name):
+    output_name = (output_name or "").strip()
+    if not output_name:
+        return datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    output_name = os.path.splitext(os.path.basename(output_name))[0].strip()
+    return output_name or datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+
+def write_wav(float_file_path, output_wav_path, sample_rate, channel_count=1, output_name=""):
     try:
         sample_rate = int(sample_rate)
         channel_count = int(channel_count)
@@ -49,8 +58,8 @@ def write_wav(float_file_path, output_wav_path, sample_rate, channel_count=1):
         if not os.path.exists(output_wav_path):
             os.makedirs(output_wav_path)
 
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        output_wav_path = os.path.join(output_wav_path, f"{timestamp}.wav")
+        output_stem = safe_output_stem(output_name)
+        output_wav_path = os.path.join(output_wav_path, f"{output_stem}.wav")
 
         pcm_data = float32_file_to_pcm16(float_file_path, channel_count)
 
@@ -69,9 +78,9 @@ def write_wav(float_file_path, output_wav_path, sample_rate, channel_count=1):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) not in (4, 5):
+    if len(sys.argv) not in (4, 5, 6):
         print(
-            "Usage: python WAVExport.py <float_tmp> <out_wav_dir> <rate> [channels]",
+            "Usage: python WAVExport.py <float_tmp> <out_wav_dir> <rate> [channels] [output_name]",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -79,6 +88,7 @@ if __name__ == "__main__":
     raw_path = sys.argv[1]
     out_path = sys.argv[2]
     rate = sys.argv[3]
-    channels = sys.argv[4] if len(sys.argv) == 5 else 1
+    channels = sys.argv[4] if len(sys.argv) >= 5 else 1
+    output_name = sys.argv[5] if len(sys.argv) == 6 else ""
 
-    sys.exit(write_wav(raw_path, out_path, rate, channels))
+    sys.exit(write_wav(raw_path, out_path, rate, channels, output_name))

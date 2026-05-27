@@ -475,16 +475,6 @@ Popup {
             }
         }
 
-        Text {
-            Layout.preferredWidth: numericField.fieldWidth
-            visible: numericField.hasError
-            text: numericField.errorText
-            color: Theme.danger
-            font.family: Theme.fontFamily
-            font.pixelSize: 11
-            wrapMode: Text.WordWrap
-        }
-
         onValueChanged: {
             if (!numericInput.activeFocus)
                 numericInput.text = formatValue(value)
@@ -579,15 +569,6 @@ Popup {
             Layout.preferredHeight: 450
             responseData: root.responseData
             mode: root.graphMode
-        }
-
-        Text {
-            Layout.fillWidth: true
-            visible: root.validationMessage.length > 0
-            text: root.validationMessage
-            color: Theme.danger
-            font.pixelSize: 13
-            wrapMode: Text.WordWrap
         }
 
         RowLayout {
@@ -744,6 +725,16 @@ Popup {
         }
 
         Item { Layout.fillHeight: true }
+
+        Text {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 20
+            text: root.validationMessage
+            color: Theme.danger
+            font.pixelSize: 13
+            wrapMode: Text.WordWrap
+            verticalAlignment: Text.AlignVCenter
+        }
 
         RowLayout {
             Layout.fillWidth: true

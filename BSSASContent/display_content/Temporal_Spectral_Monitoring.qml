@@ -5,6 +5,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import QtQuick.Dialogs
 import MangoComponent
 import BSSAS
 
@@ -19,6 +20,10 @@ Page {
     property int actionButtonHeight: 40
     readonly property bool isPlotting: daqManager.isReading
     property bool pendingRealtimeSave: false
+    property bool jointReportExportEnabled: false
+    readonly property bool canSaveRealtimeData: dataManager.realtimeCollectionAvailable
+        && !root.isPlotting
+        && !root.pendingRealtimeSave
     property int currentChannelIndex: 0
     readonly property int monitorVolumePercent: Math.round(realtimeAudioMonitor.volume * 100)
     readonly property var channelNames: ["通道一", "通道二", "通道三", "通道四", "通道五", "通道六", "通道七"]
@@ -77,6 +82,11 @@ Page {
         const normalizedPath = filePath.replace(/\\/g, "/")
         const pathSegments = normalizedPath.split("/")
         return pathSegments.length > 0 ? pathSegments[pathSegments.length - 1] : filePath
+    }
+
+    function toLocalFilePath(fileUrl) {
+        const raw = fileUrl ? fileUrl.toString() : ""
+        return raw.length > 0 ? decodeURIComponent(raw).replace(/^file:\/\/\//, "") : ""
     }
 
     /**
@@ -209,6 +219,17 @@ Page {
         }
     }
 
+    Connections {
+        target: jointExportManager
+
+        function onFailed(errorMessage) {
+            root.pendingRealtimeSave = false
+            if (errorMessage.length > 0) {
+                channelToast.showError(errorMessage)
+            }
+        }
+    }
+
     Item {
         id: leftPanel
         anchors {
@@ -321,7 +342,7 @@ Page {
                 top: left_radio_button.bottom
                 topMargin: root.leftPanelSpacing
             }
-            height: root.actionButtonHeight * 2 + 102
+            height: root.actionButtonHeight * 2 + 142
 
             ColumnLayout {
                 anchors.fill: parent
@@ -331,7 +352,7 @@ Page {
                     id: savePlotButton
                     Layout.fillWidth: true
                     Layout.preferredHeight: root.actionButtonHeight
-                    enabled: !root.pendingRealtimeSave
+                    enabled: root.canSaveRealtimeData
                     text: "保存数据"
                     hoverEnabled: true
 
@@ -341,24 +362,63 @@ Page {
                         verticalAlignment: Text.AlignVCenter
                         font.pixelSize: 15
                         font.bold: true
-                        color: Theme.textWhite
+                        color: savePlotButton.enabled
+                            ? Theme.textWhite
+                            : root.colorWithAlpha(Theme.textWhite, 0.65)
                     }
 
                     background: Rectangle {
                         radius: height / 2
-                        color: savePlotButton.down
-                            ? Qt.darker(root._actionButtonColor, 1.08)
-                            : (savePlotButton.hovered
-                                ? Qt.darker(root._actionButtonColor, 1.04)
-                                : root._actionButtonColor)
+                        color: !savePlotButton.enabled
+                            ? root.colorWithAlpha(root._actionButtonColor, 0.38)
+                            : (savePlotButton.down
+                                ? Qt.darker(root._actionButtonColor, 1.08)
+                                : (savePlotButton.hovered
+                                    ? Qt.darker(root._actionButtonColor, 1.04)
+                                    : root._actionButtonColor))
                     }
 
                     onClicked: {
-                        if (root.pendingRealtimeSave) {
+                        if (!root.canSaveRealtimeData) {
                             return
                         }
+                        if (root.jointReportExportEnabled) {
+                            jointExportFolderDialog.open()
+                            return
+                        }
+
                         root.pendingRealtimeSave = true
                         wavHandle.startSaveAsWav()
+                    }
+                }
+
+                Rectangle {
+                    id: jointExportOption
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 32
+                    radius: 8
+                    color: root.jointReportExportEnabled
+                        ? root.colorWithAlpha(Theme.primary, 0.10)
+                        : "transparent"
+                    border.width: 1
+                    border.color: root.jointReportExportEnabled
+                        ? root.colorWithAlpha(Theme.primary, 0.32)
+                        : root.colorWithAlpha(Theme.primaryBorder, 0.45)
+
+                    CheckBoxes {
+                        id: jointExportCheck
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left
+                        anchors.leftMargin: 9
+                        text: qsTr("联合导出报告")
+                        checked: root.jointReportExportEnabled
+                        interactive: false
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.jointReportExportEnabled = !root.jointReportExportEnabled
                     }
                 }
 
@@ -366,6 +426,7 @@ Page {
                     id: startPlotButton
                     Layout.fillWidth: true
                     Layout.preferredHeight: root.actionButtonHeight
+                    enabled: !root.pendingRealtimeSave
                     text: root.isPlotting ? "停止采集" : "开始采集"
                     hoverEnabled: true
 
@@ -538,6 +599,31 @@ Page {
     ToastNotification {
         id: channelToast
         duration: 2000
+    }
+
+    FolderDialog {
+        id: jointExportFolderDialog
+        title: qsTr("选择联合导出保存目录")
+
+        onAccepted: {
+            if (!root.canSaveRealtimeData) {
+                return
+            }
+
+            const localDirectoryPath = root.toLocalFilePath(selectedFolder).trim()
+            if (localDirectoryPath.length === 0) {
+                return
+            }
+
+            const started = jointExportManager.beginExport(localDirectoryPath)
+            if (!started) {
+                root.pendingRealtimeSave = false
+                return
+            }
+
+            root.pendingRealtimeSave = true
+            left_toolbar.display_content_selection = 3
+        }
     }
 
     TabBar {

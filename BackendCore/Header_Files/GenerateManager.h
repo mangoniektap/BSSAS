@@ -39,6 +39,13 @@ public:
      *  @returns 生成的 PDF 文件路径，失败返回空字符串
      */
     Q_INVOKABLE QString exportIdentificationAndFeatureExtractionReport();
+    QString exportIdentificationAndFeatureExtractionReportTo(
+        const QString& pdfFilePath,
+        QString* errorMessage = nullptr);
+    QString exportCollectionInformationReport(
+        const QVariantMap& formData,
+        const QString& pdfFilePath,
+        QString* errorMessage = nullptr);
     /** @brief 异步启动导出任务（完成时通过 exportCompleted/exportFailed 信号通知） */
     Q_INVOKABLE void startExportIdentificationAndFeatureExtractionReport();
     /** @brief 将导入信号的分析摘要持久化为临时 JSON 文件
@@ -78,6 +85,10 @@ private:
         const QVariantMap& featureValues,
         const QString& reportId,
         const QString& reportKind,
+        const QDateTime& generatedAt);
+    static QVariantMap buildCollectionInformationReportPayload(
+        const QVariantMap& formData,
+        const QString& reportId,
         const QDateTime& generatedAt);
 
     bool m_busy = false;

@@ -56,6 +56,141 @@ Page {
         return customText.length > 0 ? customText : selectControl.displayText
     }
 
+    function textValue(control) {
+        return control.text.trim()
+    }
+
+    function fileName(filePath) {
+        if (!filePath || filePath.length === 0) {
+            return ""
+        }
+        const normalizedPath = filePath.replace(/\\/g, "/")
+        const pathSegments = normalizedPath.split("/")
+        return pathSegments.length > 0 ? pathSegments[pathSegments.length - 1] : filePath
+    }
+
+    function optionalSelectValue(selectControl, textControl) {
+        const customText = textControl.text.trim()
+        if (customText.length > 0) {
+            return customText
+        }
+        return selectControl.currentIndex <= 0 ? "" : selectControl.displayText
+    }
+
+    function optionValue(index, values) {
+        return index >= 0 && index < values.length ? values[index] : ""
+    }
+
+    function minutesToSecondsText(valueText) {
+        const value = Number(valueText)
+        if (!Number.isFinite(value) || valueText.trim().length === 0) {
+            return ""
+        }
+        const seconds = value * 60
+        return Number.isInteger(seconds) ? seconds.toString() : seconds.toFixed(1)
+    }
+
+    function collectFormData() {
+        const durationSeconds = root.minutesToSecondsText(durationField.text)
+        const eatingStatus = root.optionValue(
+            eatingStatusSelect.currentIndex,
+            ["Fasting", "Postprandial", "Postoperative"])
+        const bodyPositionOptions = [
+            { body: "Supine", side: "", other: "" },
+            { body: "Sitting", side: "", other: "" },
+            { body: "Lateral Decubitus", side: "Left", other: "" },
+            { body: "Lateral Decubitus", side: "Right", other: "" },
+            { body: "Other", side: "", other: bodyPositionSelect.displayText }
+        ]
+        const bodyPosition = bodyPositionOptions[Math.max(
+            0,
+            Math.min(bodyPositionSelect.currentIndex, bodyPositionOptions.length - 1))]
+        const subjectStatus = root.optionValue(
+            subjectStatusSelect.currentIndex,
+            ["Awake", "Sedated", "Other"])
+        const eatingHours = root.textValue(eatingHoursField)
+
+        return {
+            "subject_id": root.textValue(subjectIdField),
+            "sex": maleCheck.checked ? "Male" : (femaleCheck.checked ? "Female" : ""),
+            "age": root.textValue(ageField),
+            "height": root.textValue(heightField),
+            "weight": root.textValue(weightField),
+            "medical_history": root.optionalSelectValue(medicalHistorySelect, medicalHistoryField),
+            "symptoms": root.optionalSelectValue(symptomSelect, symptomField),
+            "record_year": Qt.formatDate(root.recordingDate, "yyyy"),
+            "record_month": Qt.formatDate(root.recordingDate, "MM"),
+            "record_day": Qt.formatDate(root.recordingDate, "dd"),
+            "examiner": root.textValue(examinerField),
+            "remarks": root.textValue(remarksField),
+            "sampling_rate": root.textValue(samplingRateField),
+            "bit_depth": root.textValue(bitDepthField),
+            "env_type": root.optionValue(
+                envTypeSelect.currentIndex,
+                ["Quiet Laboratory", "Ward", "Other"]),
+            "env_other": root.textValue(envOtherField),
+            "specific_point": root.textValue(specificPointField),
+            "duration_per_quadrant": durationSeconds,
+            "total_recording_duration": durationSeconds,
+            "is_continuous": true,
+            "interval_s": "",
+            "eating_status": eatingStatus,
+            "fasting_h": eatingStatus === "Fasting" ? eatingHours : "",
+            "postprandial_h": eatingStatus === "Postprandial" ? eatingHours : "",
+            "postoperative_h": eatingStatus === "Postoperative" ? eatingHours : "",
+            "body_position": bodyPosition.body,
+            "lateral_side": bodyPosition.side,
+            "position_other": bodyPosition.other,
+            "subject_status": subjectStatus,
+            "subject_status_other": subjectStatus === "Other" ? subjectStatusSelect.displayText : "",
+            "eval_overall": root.optionValue(overallEvalSelect.currentIndex, ["Normal", "Abnormal"]),
+            "feature_tip": root.optionValue(
+                featureTipSelect.currentIndex,
+                ["Decreased", "Normal", "Increased", "Abnormal"]),
+            "clinical_analysis": clinicalAnalysisArea.text.trim(),
+            "conclusion_text": conclusionArea.text.trim(),
+            "recommendation_text": recommendationArea.text.trim(),
+            "appendix_content": appendixArea.text.trim(),
+            "associated_diseases": [],
+            "quadrants": []
+        }
+    }
+
+    function clearForm() {
+        subjectIdField.text = ""
+        maleCheck.checked = false
+        femaleCheck.checked = false
+        ageField.text = ""
+        heightField.text = ""
+        weightField.text = ""
+        medicalHistorySelect.currentIndex = 0
+        medicalHistoryField.text = ""
+        symptomSelect.currentIndex = 0
+        symptomField.text = ""
+        const now = new Date()
+        root.recordingDate = now
+        root.recordingHour = now.getHours()
+        root.recordingMinute = now.getMinutes()
+        examinerField.text = ""
+        remarksField.text = ""
+        samplingRateField.text = ""
+        bitDepthField.text = ""
+        envTypeSelect.currentIndex = 0
+        envOtherField.text = ""
+        specificPointField.text = ""
+        durationField.text = ""
+        eatingStatusSelect.currentIndex = 0
+        eatingHoursField.text = ""
+        bodyPositionSelect.currentIndex = 0
+        subjectStatusSelect.currentIndex = 0
+        overallEvalSelect.currentIndex = 0
+        featureTipSelect.currentIndex = 0
+        clinicalAnalysisArea.text = ""
+        conclusionArea.text = ""
+        recommendationArea.text = ""
+        appendixArea.text = ""
+    }
+
     /**
      * @brief 表单文本输入框组件，预置样式、圆角、颜色与浮动占位符。
      */
@@ -272,18 +407,13 @@ Page {
                                         border.width: 1
                                         border.color: maleCheck.checked ? Theme.primary : Theme.primaryBorder
 
-                                        RowLayout {
-                                            anchors.fill: parent
-                                            anchors.margins: 10
-                                            spacing: 8
-                                            CheckBoxes { id: maleCheck; interactive: false }
-                                            Text {
-                                                Layout.fillWidth: true
-                                                text: "男（Male）"
-                                                color: Theme.textPrimary
-                                                font.family: Theme.fontFamily; font.pixelSize: Theme.fontBody; font.weight: Font.Normal
-                                                verticalAlignment: Text.AlignVCenter
-                                            }
+                                        CheckBoxes {
+                                            id: maleCheck
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 10
+                                            text: "男（Male）"
+                                            interactive: false
                                         }
 
                                         MouseArea {
@@ -305,18 +435,13 @@ Page {
                                         border.width: 1
                                         border.color: femaleCheck.checked ? Theme.primary : Theme.primaryBorder
 
-                                        RowLayout {
-                                            anchors.fill: parent
-                                            anchors.margins: 10
-                                            spacing: 8
-                                            CheckBoxes { id: femaleCheck; interactive: false }
-                                            Text {
-                                                Layout.fillWidth: true
-                                                text: "女（Female）"
-                                                color: Theme.textPrimary
-                                                font.family: Theme.fontFamily; font.pixelSize: Theme.fontBody; font.weight: Font.Normal
-                                                verticalAlignment: Text.AlignVCenter
-                                            }
+                                        CheckBoxes {
+                                            id: femaleCheck
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 10
+                                            text: "女（Female）"
+                                            interactive: false
                                         }
 
                                         MouseArea {
@@ -969,6 +1094,167 @@ Page {
                         }
                     }
                 }
+            }
+
+            Item {
+                Layout.fillWidth: true
+                visible: jointExportManager.active
+                implicitHeight: visible ? actionCard.implicitHeight : 0
+
+                Rectangle {
+                    id: actionCard
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: Math.min(parent.width, 980)
+                    implicitHeight: actionRow.implicitHeight + 28
+                    radius: 18
+                    color: Theme.pageBg
+                    border.width: 1
+                    border.color: Theme.border
+
+                    RowLayout {
+                        id: actionRow
+                        anchors.fill: parent
+                        anchors.margins: 14
+                        spacing: 12
+
+                        Item {
+                            Layout.fillWidth: true
+                        }
+
+                        Button {
+                            id: clearJointExportButton
+                            Layout.preferredWidth: 110
+                            Layout.preferredHeight: 40
+                            text: qsTr("清空")
+                            hoverEnabled: true
+
+                            contentItem: Text {
+                                text: clearJointExportButton.text
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 14
+                                font.bold: true
+                                color: Theme.primary
+                            }
+
+                            background: Rectangle {
+                                radius: 20
+                                color: clearJointExportButton.down
+                                    ? Theme.primaryLight
+                                    : (clearJointExportButton.hovered ? Theme.primaryLighter : Theme.pageBg)
+                                border.width: 1
+                                border.color: Theme.primaryBorder
+                            }
+
+                            onClicked: root.clearForm()
+                        }
+
+                        Button {
+                            id: saveJointExportButton
+                            Layout.preferredWidth: 110
+                            Layout.preferredHeight: 40
+                            enabled: !jointExportManager.saving
+                            text: qsTr("保存")
+                            hoverEnabled: true
+
+                            contentItem: Text {
+                                text: saveJointExportButton.text
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 14
+                                font.bold: true
+                                color: Theme.textWhite
+                            }
+
+                            background: Rectangle {
+                                radius: 20
+                                color: saveJointExportButton.enabled
+                                    ? (saveJointExportButton.down
+                                        ? Qt.darker(Theme.primary, 1.08)
+                                        : (saveJointExportButton.hovered
+                                            ? Qt.darker(Theme.primary, 1.04)
+                                            : Theme.primary))
+                                    : Theme.disabledBg
+                            }
+
+                            onClicked: {
+                                jointExportManager.saveWithMedicalRecord(root.collectFormData())
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    ToastNotification {
+        id: pageToast
+        duration: 2400
+    }
+
+    Connections {
+        target: jointExportManager
+
+        function onCompleted(outputDirectory) {
+            const folderName = root.fileName(outputDirectory)
+            pageToast.showSuccess(
+                folderName.length > 0
+                    ? qsTr("联合导出完成：") + folderName
+                    : qsTr("联合导出完成"))
+        }
+
+        function onFailed(errorMessage) {
+            pageToast.showError(
+                errorMessage.length > 0 ? errorMessage : qsTr("联合导出失败"))
+        }
+    }
+
+    Popup {
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: 260
+        height: 220
+        modal: true
+        closePolicy: Popup.NoAutoClose
+        visible: jointExportManager.saving
+
+        Overlay.modal: BlurGlass {
+            blurSource: ApplicationWindow.window ? ApplicationWindow.window.contentItem : null
+            blurAmount: 64
+            borderRadius: 25
+            overlayOpacity: 0.3
+        }
+
+        background: Rectangle {
+            radius: 24
+            color: Theme.primaryLighter
+            border.width: 1
+            border.color: Theme.primaryBorder
+        }
+
+        contentItem: Column {
+            anchors.centerIn: parent
+            spacing: 20
+
+            StandbyAnimation {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: 78
+                height: 78
+                blockColor: Theme.primary
+                running: jointExportManager.saving
+            }
+
+            Text {
+                width: 200
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                text: jointExportManager.statusMessage.length > 0
+                    ? jointExportManager.statusMessage
+                    : qsTr("联合导出处理中...")
+                color: Theme.textPrimary
+                font.pixelSize: 16
             }
         }
     }

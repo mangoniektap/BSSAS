@@ -43,6 +43,7 @@ public:
     void clear();
     /** @brief 标记一次采集已结束，后续可进行完整分析 */
     void collectionCompleted();
+    bool realtimeCollectionAvailable() const;
 
     /** @brief 追加实时时域原始数据到临时文件 */
     void splicTimeDomainData(const QVector<float>& rawData, int sampleRate);
@@ -327,6 +328,10 @@ class DataManager : public QObject
         QVariantMap importedAnalysisSummary
         READ importedAnalysisSummary
         NOTIFY importedAnalysisSummaryChanged)
+    Q_PROPERTY(
+        bool realtimeCollectionAvailable
+        READ realtimeCollectionAvailable
+        NOTIFY realtimeCollectionAvailabilityChanged)
 public:
     static constexpr int NORMAL_SAMPLE_RATE = 12000;
     static constexpr int HIGH_SPEED_SAMPLE_RATE = 150000;
@@ -349,6 +354,7 @@ public:
     void setHighSpeedCollectionMode(bool enabled);
     int configuredSampleRate() const;
     void setConfiguredSampleRate(int sampleRate);
+    Q_INVOKABLE bool realtimeCollectionAvailable();
 
     Q_INVOKABLE void initializeDatabase();
     Q_INVOKABLE void collectionCompleted();
@@ -422,6 +428,7 @@ signals:
     void configuredSampleRateChanged();
     /** @brief 导入信号分析摘要发生变化时发出 */
     void importedAnalysisSummaryChanged();
+    void realtimeCollectionAvailabilityChanged();
 
 private:
     explicit DataManager(QObject* parent = nullptr);
