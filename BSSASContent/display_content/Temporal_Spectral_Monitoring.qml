@@ -95,6 +95,16 @@ Page {
         return -1
     }
 
+    function restartRealtimeWaveformWindow(channelIndex) {
+        if (!root.isPlotting || channelIndex < 0) {
+            return
+        }
+
+        const latestTimestamp = dataManager.realtimeWaveformDurationForChannel(channelIndex)
+        rawTimeWaveform.restartDisplayWindow(
+            Number.isFinite(latestTimestamp) ? latestTimestamp : 0)
+    }
+
     /**
      * @brief 确保当前选中通道为激活状态；若当前通道已关闭则自动切换至首个激活通道。
      * @param showToast 是否显示切换提示
@@ -111,6 +121,11 @@ Page {
             root.activeChannels[root.currentChannelIndex]) {
             left_radio_button.selectedIndices = [root.currentChannelIndex]
             return
+        }
+
+        const channelChanged = root.currentChannelIndex !== activeIndex
+        if (channelChanged) {
+            root.restartRealtimeWaveformWindow(activeIndex)
         }
 
         left_radio_button.selectedIndices = [activeIndex]
@@ -267,6 +282,10 @@ Page {
                     if (defaultChannelIndex < 0) {
                         return
                     }
+                    const channelChanged = root.currentChannelIndex !== defaultChannelIndex
+                    if (channelChanged) {
+                        root.restartRealtimeWaveformWindow(defaultChannelIndex)
+                    }
                     left_radio_button.selectedIndices = [defaultChannelIndex]
                     signalPreprocessing.setCurrentChannel(defaultChannelIndex)
                     root.currentChannelIndex = defaultChannelIndex
@@ -279,8 +298,8 @@ Page {
                     }
                     const channelChanged = root.currentChannelIndex !== channelIndex
 
-                    if (root.isPlotting && channelChanged) {
-                        rawTimeWaveform.clearSeriesOnly()
+                    if (channelChanged) {
+                        root.restartRealtimeWaveformWindow(channelIndex)
                     }
 
                     signalPreprocessing.setCurrentChannel(channelIndex)
@@ -468,7 +487,9 @@ Page {
                             spacing: 6
 
                             Text {
-                                text: "通道一"
+                                text: root.currentChannelIndex >= 0 && root.currentChannelIndex < root.channelNames.length
+                                    ? root.channelNames[root.currentChannelIndex]
+                                    : ""
                                 font.pixelSize: 12
                                 color: Theme.textMuted
                             }

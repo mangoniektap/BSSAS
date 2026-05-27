@@ -23,6 +23,7 @@ Item {
     readonly property real visibleAmplitudeRange: currentResolutionY * fixedGridCountY
     readonly property real timeAxisScaleFactor: 1
     readonly property string timeAxisTitleText: "时间 / S"
+    property real windowAnchorTimestamp: 0
     property real fromTimestamp: 0
     property real toTimestamp: fixedVisibleTimeLength
     readonly property real displayMinY: -visibleAmplitudeRange / 2
@@ -103,7 +104,36 @@ Item {
      */
     function resetView() {
         currentResolutionX = defaultResolutionX;
+        windowAnchorTimestamp = 0;
         updateRealtimeWindow(0);
+    }
+
+    function restartDisplayWindow(startTimestamp) {
+        var safeStartTimestamp = Number.isFinite(startTimestamp) ? Math.max(0, startTimestamp) : 0;
+        windowAnchorTimestamp = safeStartTimestamp;
+        fromTimestamp = safeStartTimestamp;
+        toTimestamp = safeStartTimestamp + fixedVisibleTimeLength;
+        wave_series.clear();
+    }
+
+    function pointsInsideCurrentWindow(points) {
+        if (!points || points.length === 0) {
+            return [];
+        }
+
+        var filteredPoints = [];
+        for (let index = 0; index < points.length; ++index) {
+            const point = points[index];
+            if (!point || !Number.isFinite(point.x)) {
+                continue;
+            }
+
+            if (point.x >= fromTimestamp && point.x <= toTimestamp) {
+                filteredPoints.push(point);
+            }
+        }
+
+        return filteredPoints;
     }
 
     /**
@@ -114,6 +144,7 @@ Item {
         var visiblePoints = currentResolutionX < rawDataResolutionThreshold
                 ? dataManager.realtimeWaveformPointsForChannel(currentChannelIndex, fromTimestamp, toTimestamp)
                 : dataManager.realtimeDownsampledWaveformPoints(fromTimestamp, toTimestamp);
+        visiblePoints = root.pointsInsideCurrentWindow(visiblePoints);
         if (!visiblePoints || visiblePoints.length === 0) {
             wave_series.clear();
             return;
@@ -176,9 +207,15 @@ Item {
      */
     function updateRealtimeWindow(latestTimestamp) {
         var safeLatestTimestamp = Number.isFinite(latestTimestamp) ? Math.max(0, latestTimestamp) : 0;
-        var windowEnd = Math.max(fixedVisibleTimeLength, safeLatestTimestamp);
+        var safeAnchorTimestamp = Number.isFinite(windowAnchorTimestamp) ? Math.max(0, windowAnchorTimestamp) : 0;
+        var anchoredWindowEnd = safeAnchorTimestamp + fixedVisibleTimeLength;
+        var windowEnd = safeLatestTimestamp <= anchoredWindowEnd
+                ? anchoredWindowEnd
+                : safeLatestTimestamp;
         toTimestamp = windowEnd;
-        fromTimestamp = Math.max(0, windowEnd - fixedVisibleTimeLength);
+        fromTimestamp = safeLatestTimestamp <= anchoredWindowEnd
+                ? safeAnchorTimestamp
+                : Math.max(0, windowEnd - fixedVisibleTimeLength);
         refreshSeries();
     }
 

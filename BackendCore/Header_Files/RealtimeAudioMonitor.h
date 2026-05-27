@@ -1,5 +1,5 @@
 /** @file RealtimeAudioMonitor.h
- *  @brief 实时音频监听器，将 DAQ 通道一数据输出到系统默认播放设备。
+ *  @brief 实时音频监听器，将当前 DAQ 通道数据输出到系统默认播放设备。
  */
 
 #ifndef REALTIMEAUDIOMONITOR_H
@@ -20,7 +20,7 @@ class RealtimeAudioMonitor : public QObject
     Q_OBJECT
     Q_PROPERTY(bool enabled READ enabled WRITE setEnabled NOTIFY enabledChanged)
     Q_PROPERTY(double volume READ volume WRITE setVolume NOTIFY volumeChanged)
-    Q_PROPERTY(int channelIndex READ channelIndex CONSTANT)
+    Q_PROPERTY(int channelIndex READ channelIndex WRITE setChannelIndex NOTIFY channelIndexChanged)
 
 public:
     explicit RealtimeAudioMonitor(DaqDeviceManager* daqManager, QObject* parent = nullptr);
@@ -33,10 +33,12 @@ public:
     Q_INVOKABLE void setEnabled(bool enabled);
     Q_INVOKABLE void setVolume(double volume);
     Q_INVOKABLE void adjustVolume(double delta);
+    Q_INVOKABLE void setChannelIndex(int channelIndex);
 
 signals:
     void enabledChanged();
     void volumeChanged();
+    void channelIndexChanged();
 
 private slots:
     void handleRealtimeDataUpdated(const QVector<QVector<float>>& channelsData);

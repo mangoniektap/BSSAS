@@ -46,6 +46,11 @@ int main(int argc, char *argv[])
     AdaptiveDownsampling adaptiveDownsampling;
     SignalDFTCalculation signalDFTCalculation;
     RealtimeAudioMonitor realtimeAudioMonitor(daqManager, &app);
+    QObject::connect(
+        SignalPreprocessing::instance(),
+        &SignalPreprocessing::channelChanged,
+        &realtimeAudioMonitor,
+        &RealtimeAudioMonitor::setChannelIndex);
     RecognitionServiceManager recognitionServiceManager(&app);
     UpdateManager updateManager(&app);
     DebugTerminalManager debugTerminalManager(&app);

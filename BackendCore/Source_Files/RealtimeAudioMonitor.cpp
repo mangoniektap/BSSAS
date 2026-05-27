@@ -119,6 +119,26 @@ void RealtimeAudioMonitor::adjustVolume(double delta)
     setVolume(m_volume + delta);
 }
 
+void RealtimeAudioMonitor::setChannelIndex(int channelIndex)
+{
+    const int normalizedChannelIndex = std::max(0, channelIndex);
+    if (m_channelIndex == normalizedChannelIndex) {
+        return;
+    }
+
+    m_channelIndex = normalizedChannelIndex;
+    if (m_audioSink != nullptr) {
+        m_audioSink->reset();
+        m_audioOutput = m_audioSink->start();
+        if (m_audioOutput == nullptr) {
+            qWarning() << "RealtimeAudioMonitor: failed to restart audio sink after channel change";
+            stopAudioOutput();
+        }
+    }
+
+    emit channelIndexChanged();
+}
+
 void RealtimeAudioMonitor::handleRealtimeDataUpdated(
     const QVector<QVector<float>>& channelsData)
 {
