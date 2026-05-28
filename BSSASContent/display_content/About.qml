@@ -19,8 +19,7 @@ Page {
     readonly property int outerMargin: Math.max(14, Math.min(22, width * 0.018))
     readonly property int cardSpacing: 16
     readonly property bool compactCards: Constants.isCompactContent(width, height) || width < 980
-    readonly property real posterHeightBudget: height * (compactCards ? 0.24 : 0.36)
-    readonly property real posterWidth: Math.max(0, Math.min(width - outerMargin * 2, posterHeightBudget * posterAspectRatio))
+    readonly property real posterWidth: Math.max(0, width - outerMargin * 2)
     readonly property real posterHeight: posterWidth / posterAspectRatio
     readonly property int informationCardHeight: compactCards ? 318 : Math.max(270, Math.min(318, height * 0.34))
     readonly property int designPanelHeight: compactCards ? 290 : Math.max(142, Math.min(166, height * 0.18))
@@ -410,17 +409,25 @@ Page {
     }
 
     Flickable {
-        anchors.fill: parent
+        id: aboutFlickable
+        anchors {
+            fill: parent
+            topMargin: root.outerMargin
+            bottomMargin: root.outerMargin
+            leftMargin: root.outerMargin
+            rightMargin: root.outerMargin
+        }
         clip: true
         contentWidth: width
-        contentHeight: Math.max(height, contentColumn.implicitHeight + root.outerMargin * 2)
+        contentHeight: contentColumn.height
         boundsBehavior: Flickable.StopAtBounds
 
         ColumnLayout {
             id: contentColumn
-            x: root.outerMargin
-            y: 20
-            width: parent.width - root.outerMargin * 2
+            x: 0
+            y: 0
+            width: parent.width
+            height: Math.max(aboutFlickable.height, implicitHeight)
             spacing: root.cardSpacing
 
             /**
@@ -432,9 +439,7 @@ Page {
 
                 Image {
                     id: posterImage
-                    width: root.posterWidth
-                    height: root.posterHeight
-                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.fill: parent
                     source: root.asset("header_poster.png")
                     sourceClipRect: Qt.rect(0, 74, 2171, 576)
                     fillMode: Image.PreserveAspectFit

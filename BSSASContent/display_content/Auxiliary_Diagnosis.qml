@@ -1183,7 +1183,7 @@ Item {
             anchors.margins: root.contentMargin
             clip: true
             contentWidth: availableWidth
-            contentHeight: Math.max(availableHeight, diagnosisContentColumn.implicitHeight)
+            contentHeight: diagnosisContentColumn.height
 
             ScrollBar.vertical: ScrollBar { policy: ScrollBar.AlwaysOff }
             ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AlwaysOff }
@@ -1197,7 +1197,8 @@ Item {
             Rectangle {
                 id: topPanel
                 Layout.fillWidth: true
-                Layout.preferredHeight: root.topPanelHeight
+                Layout.preferredHeight: Math.max(root.topPanelHeight, implicitHeight)
+                implicitHeight: topPanelContentLayout.implicitHeight + Math.max(20, Math.min(30, width * 0.025)) * 2
                 radius: 22
                 color: Theme.heroBgStart
                 border.width: 1
@@ -1215,9 +1216,10 @@ Item {
                 }
 
                 ColumnLayout {
+                    id: topPanelContentLayout
                     anchors.fill: parent
                     anchors.margins: Math.max(20, Math.min(30, topPanel.width * 0.025))
-                    spacing: Math.max(16, Math.min(22, topPanel.height * 0.08))
+                    spacing: Math.max(16, Math.min(22, root.height * 0.08))
 
                     ColumnLayout {
                         Layout.fillWidth: true
@@ -1255,7 +1257,7 @@ Item {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             Layout.preferredWidth: root.compactLayout ? -1 : 360
-                            Layout.minimumHeight: root.compactLayout ? 92 : 104
+                            Layout.preferredHeight: root.compactLayout ? 92 : 104
                             radius: 16
                             color: modelSelectorMouse.pressed
                                 ? Theme.pageBg
@@ -1360,7 +1362,7 @@ Item {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             Layout.preferredWidth: root.compactLayout ? -1 : 430
-                            Layout.minimumHeight: root.compactLayout ? 92 : 104
+                            Layout.preferredHeight: root.compactLayout ? 92 : 104
                             radius: 16
                             color: Theme.textWhite
                             border.width: 1
@@ -1405,7 +1407,7 @@ Item {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             Layout.preferredWidth: root.compactLayout ? -1 : 350
-                            Layout.minimumHeight: root.compactLayout ? 92 : 104
+                            Layout.preferredHeight: root.compactLayout ? 92 : 104
                             radius: 16
                             color: uploadMouse.pressed
                                 ? Theme.secondaryPressedBg
@@ -1520,8 +1522,10 @@ Item {
                     id: statusPanel
                     Layout.fillWidth: true
                     Layout.fillHeight: !root.compactLayout
+                    Layout.alignment: Qt.AlignTop
                     Layout.preferredWidth: root.compactLayout ? diagnosisBody.width : 730
                     Layout.preferredHeight: root.compactLayout ? Math.max(620, root.height * 0.68) : -1
+                    implicitHeight: statusPanelColumn.implicitHeight + 32
                     radius: 16
                     color: Theme.textWhite
                     border.width: 1
@@ -1529,6 +1533,7 @@ Item {
                     clip: true
 
                     ColumnLayout {
+                        id: statusPanelColumn
                         anchors.fill: parent
                         anchors.margins: 16
                         spacing: 12
@@ -2265,9 +2270,11 @@ Item {
                     id: summaryPanel
                     Layout.fillWidth: root.compactLayout
                     Layout.fillHeight: !root.compactLayout
+                    Layout.alignment: Qt.AlignTop
                     Layout.minimumWidth: root.compactLayout ? 0 : 310
                     Layout.preferredWidth: root.compactLayout ? diagnosisBody.width : 380
-                    Layout.preferredHeight: root.compactLayout ? 260 : -1
+                    implicitHeight: summaryPanelColumn.implicitHeight + 32
+                    Layout.preferredHeight: root.compactLayout ? Math.max(260, implicitHeight) : -1
                     Layout.maximumWidth: root.compactLayout ? 100000 : 430
                     radius: 16
                     color: Theme.textWhite
@@ -2276,6 +2283,7 @@ Item {
                     clip: true
 
                     ColumnLayout {
+                        id: summaryPanelColumn
                         anchors.fill: parent
                         anchors.margins: 16
                         spacing: 10

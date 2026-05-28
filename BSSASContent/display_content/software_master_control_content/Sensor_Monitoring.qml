@@ -296,20 +296,27 @@ Item {
 
     ScrollView {
         id: sensorScrollView
-        anchors.fill: parent
+        anchors {
+            fill: parent
+            topMargin: root.pageMargin
+            bottomMargin: root.pageMargin
+            leftMargin: root.pageMargin
+            rightMargin: root.pageMargin
+        }
         clip: true
         contentWidth: availableWidth
-        contentHeight: Math.max(availableHeight, rootLayout.implicitHeight + root.pageMargin * 2)
+        contentHeight: rootLayout.height
 
         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AlwaysOff }
         ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AlwaysOff }
 
         ColumnLayout {
-        id: rootLayout
-        x: root.pageMargin
-        y: root.pageMargin
-        width: sensorScrollView.availableWidth - root.pageMargin * 2
-        spacing: 18
+            id: rootLayout
+            x: 0
+            y: 0
+            width: sensorScrollView.availableWidth
+            height: Math.max(sensorScrollView.availableHeight, implicitHeight)
+            spacing: 18
 
         RowLayout {
             Layout.fillWidth: true
@@ -345,7 +352,8 @@ Item {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: root.contentPanelHeight
+            Layout.fillHeight: !root.stackedContent
+            implicitHeight: contentRow.implicitHeight + 36
             radius: 22
             color: root.panelColor
             border.width: 1
@@ -365,7 +373,7 @@ Item {
                     Layout.fillHeight: !root.stackedContent
                     Layout.minimumWidth: root.stackedContent ? 0 : 360
                     Layout.preferredWidth: root.stackedContent ? contentRow.width : Math.max(380, contentRow.width * 0.6)
-                    Layout.preferredHeight: root.stackedContent ? Math.max(340, Math.min(430, root.height * 0.46)) : -1
+                    implicitHeight: (root.stackedContent ? contentRow.width : Math.max(380, contentRow.width * 0.6)) / 2
                     radius: 18
                     color: "transparent"
                     border.width: 1
@@ -475,9 +483,10 @@ Item {
                 Rectangle {
                     Layout.fillWidth: root.stackedContent
                     Layout.fillHeight: !root.stackedContent
+                    Layout.alignment: Qt.AlignTop
                     Layout.minimumWidth: root.stackedContent ? 0 : 320
                     Layout.preferredWidth: root.stackedContent ? contentRow.width : Math.max(360, contentRow.width * 0.4)
-                    Layout.preferredHeight: root.stackedContent ? 310 : -1
+                    implicitHeight: listColumnLayout.implicitHeight + 20
                     Layout.maximumWidth: root.stackedContent ? 100000 : 520
                     radius: 18
                     color: "transparent"
@@ -485,6 +494,7 @@ Item {
                     border.color: root.borderColor
 
                     ColumnLayout {
+                        id: listColumnLayout
                         anchors.fill: parent
                         anchors.margins: 10
                         spacing: 8
@@ -496,47 +506,24 @@ Item {
                             color: root.accentColor
                         }
 
-                        ScrollView {
-                            id: pointsScroll
+                        Column {
+                            id: pointListColumn
                             Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            clip: true
-                            contentWidth: availableWidth
+                            spacing: root.pointRowSpacing
 
-                            ScrollBar.vertical: ScrollBar {
-                                policy: ScrollBar.AlwaysOff
-                            }
+                            Repeater {
+                                model: root.workingPoints.length
 
-                            ScrollBar.horizontal: ScrollBar {
-                                policy: ScrollBar.AlwaysOff
-                            }
+                                delegate: Rectangle {
+                                    required property int index
+                                    readonly property int rowPointIndex: index
+                                    readonly property var pointData: root.workingPoints[rowPointIndex]
+                                    readonly property real rowTextSize: Math.max(16, Math.min(22, Math.round(height * 0.26)))
+                                    readonly property real coordinateTextSize: Math.max(18, Math.min(26, Math.round(height * 0.30)))
 
-                            Column {
-                                id: pointListColumn
-                                width: pointsScroll.availableWidth
-                                height: Math.max(
-                                    pointsScroll.availableHeight,
-                                    root.workingPoints.length * 64 +
-                                        Math.max(0, root.workingPoints.length - 1) * spacing)
-                                spacing: root.pointRowSpacing
-
-                                Repeater {
-                                    model: root.workingPoints.length
-
-                                    delegate: Rectangle {
-                                        required property int index
-                                        readonly property int rowPointIndex: index
-                                        readonly property var pointData: root.workingPoints[rowPointIndex]
-                                        readonly property real rowTextSize: Math.max(16, Math.min(22, Math.round(height * 0.26)))
-                                        readonly property real coordinateTextSize: Math.max(18, Math.min(26, Math.round(height * 0.30)))
-
-                                        width: parent ? parent.width : 440
-                                        height: Math.max(
-                                            64,
-                                            (pointListColumn.height -
-                                                Math.max(0, root.workingPoints.length - 1) * pointListColumn.spacing) /
-                                                Math.max(1, root.workingPoints.length))
-                                        radius: 12
+                                    width: pointListColumn.width
+                                    height: 64
+                                    radius: 12
                                         color: root.chipColor
                                         border.width: 1
                                         border.color: root.colorWithAlpha(root.accentColor, 0.22)
@@ -680,7 +667,6 @@ Item {
                     }
                 }
             }
-        }
 
         RowLayout {
             Layout.fillWidth: true

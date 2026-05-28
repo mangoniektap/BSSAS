@@ -308,23 +308,40 @@ Item {
         }
     }
 
-    Image {
-        id: heroImage
+    ScrollView {
+        id: mainScrollView
         anchors {
-            top: parent.top
+            fill: parent
             topMargin: 18
-            left: parent.left
+            bottomMargin: 18
             leftMargin: 20
-            right: parent.right
             rightMargin: 20
         }
-        height: Math.min(width / (2508 / 627), parent.height * 0.36)
-        fillMode: Image.PreserveAspectFit
-        source: "qrc:/qt/qml/BSSASContent/image resources/home page/hero_intestine_waveform.png"
-        smooth: true
-        mipmap: true
-        z: 0
-    }
+        clip: true
+        contentWidth: availableWidth
+        contentHeight: Math.max(availableHeight, homeDetailPanels.y + homeDetailPanels.height)
+        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AlwaysOff }
+        ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AlwaysOff }
+
+        Item {
+            id: contentItemContainer
+            width: mainScrollView.availableWidth
+            height: mainScrollView.contentHeight
+
+            Image {
+                id: heroImage
+                anchors {
+                    top: parent.top
+                    left: parent.left
+                    right: parent.right
+                }
+                height: width / (2508 / 627)
+                fillMode: Image.PreserveAspectFit
+                source: "qrc:/qt/qml/BSSASContent/image resources/home page/hero_intestine_waveform.png"
+                smooth: true
+                mipmap: true
+                z: 0
+            }
 
     Rectangle {
         id: searchShadow
@@ -633,38 +650,29 @@ Item {
         }
     }
 
-    ScrollView {
-        id: detailScrollView
-        anchors {
-            top: overviewCardGrid.bottom
-            topMargin: 16
-            left: heroImage.left
-            right: heroImage.right
-            bottom: parent.bottom
-            bottomMargin: 18
-        }
-        clip: true
-        contentWidth: availableWidth
-        contentHeight: Math.max(availableHeight, homeDetailPanels.height)
-        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AlwaysOff }
-        ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AlwaysOff }
-        z: 1
-
         GridLayout {
             id: homeDetailPanels
-            width: detailScrollView.availableWidth
-            height: root.compactContent ? implicitHeight : detailScrollView.availableHeight
+            anchors {
+                top: overviewCardGrid.bottom
+                topMargin: 16
+                left: heroImage.left
+                right: heroImage.right
+            }
             columns: root.compactContent ? 1 : 2
             columnSpacing: 16
             rowSpacing: 16
+            height: root.compactContent
+                    ? implicitHeight
+                    : Math.max(implicitHeight, mainScrollView.availableHeight - y)
 
         Rectangle {
             id: recentSignalPanel
             Layout.fillWidth: true
             Layout.fillHeight: !root.compactContent
+            Layout.alignment: Qt.AlignTop
             Layout.preferredWidth: root.compactContent ? homeDetailPanels.width : homeDetailPanels.width * 0.56
-            Layout.preferredHeight: root.responsiveRecentSignalPanelHeight
             Layout.minimumHeight: 190
+            implicitHeight: root.compactContent ? recentSignalColumn.implicitHeight + 36 : Layout.minimumHeight
             radius: 22
             color: Theme.textWhite
             border.color: Theme.border
@@ -672,6 +680,7 @@ Item {
             clip: true
 
             ColumnLayout {
+                id: recentSignalColumn
                 anchors {
                     fill: parent
                     margins: 18
@@ -813,9 +822,10 @@ Item {
             id: systemStatusPanel
             Layout.fillWidth: true
             Layout.fillHeight: !root.compactContent
+            Layout.alignment: Qt.AlignTop
             Layout.preferredWidth: root.compactContent ? homeDetailPanels.width : homeDetailPanels.width * 0.44
-            Layout.preferredHeight: root.responsiveSystemStatusPanelHeight
             Layout.minimumHeight: 190
+            implicitHeight: root.compactContent ? systemStatusColumn.implicitHeight + 36 : Layout.minimumHeight
             radius: 22
             color: Theme.textWhite
             border.color: Theme.border
@@ -823,6 +833,7 @@ Item {
             clip: true
 
             ColumnLayout {
+                id: systemStatusColumn
                 anchors {
                     fill: parent
                     margins: 18
@@ -950,7 +961,6 @@ Item {
                     }
                 }
             }
-        }
         }
     }
 
@@ -1219,6 +1229,8 @@ Item {
                     renderType: Text.NativeRendering
                 }
             }
+        }
+    }
         }
     }
 }
